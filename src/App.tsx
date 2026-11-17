@@ -330,7 +330,7 @@ export default function App() {
     <section className="workspace">
       <header className="topbar">
         <div className="top-leading"><button className="sidebar-toggle" onClick={() => setSidebarVisible(v => !v)} aria-label={sidebarVisible ? "Скрыть боковую панель" : "Показать боковую панель"} title={sidebarVisible ? "Скрыть боковую панель" : "Показать боковую панель"}>{sidebarVisible ? "‹" : "☰"}</button><div className="top-brand"><span className="brand-orb">QQ</span><div><strong>QQ AI</strong><small>Ваше пространство для идей</small></div></div></div>
-        <div className="top-actions">
+        <div className="top-actions">\n          <button className="history-open-button" onClick={() => void showHistory()}>История</button>
           <button className="cloud-pill" onClick={() => setAuthOpen(true)}><span className={session ? "cloud-dot connected" : "cloud-dot"} />{session ? "Облако" : "Синхронизация"}</button>
           <div className="mode-switch" aria-label="Режим работы">
             <button className={mode === "online" ? "selected" : ""} onClick={() => { setMode("online"); setError(""); setStatus("Онлайн-режим"); }}>Онлайн</button>
