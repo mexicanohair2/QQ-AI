@@ -39,7 +39,7 @@ export function ChatComposer({ onSend, disabled, isGenerating, onStop }: ChatCom
         placeholder="Спросите о чём-нибудь…"
         rows={1}
         maxLength={12000}
-        disabled={disabled}
+        disabled={disabled || isGenerating}
         aria-describedby="composer-hint"
       />
       {isGenerating ? (
