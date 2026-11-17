@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { CreateMLCEngine } from "@mlc-ai/web-llm";
 
 type Message = { role: "user" | "assistant"; content: string };
 const MODEL_ID = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
@@ -33,6 +32,7 @@ export default function App() {
     try {
       if (!("gpu" in navigator)) throw new Error("Этот браузер не предоставляет WebGPU. Локальная модель пока не поддерживается в нём.");
       setStatus("Загружаем Qwen 0.5B. Первый запуск потребует около 1 ГБ свободной памяти и загрузки модели.");
+      const { CreateMLCEngine } = await import("@mlc-ai/web-llm");
       const created = await CreateMLCEngine(MODEL_ID, {
         initProgressCallback: (report: { progress: number; text: string }) => {
           setProgress(Math.max(0, Math.min(100, Math.round(report.progress * 100))));
