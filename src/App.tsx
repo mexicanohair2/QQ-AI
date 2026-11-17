@@ -23,6 +23,33 @@ function readMessages(): Message[] {
   } catch { return []; }
 }
 
+function remarkAnswerUnderline() {
+  return (tree: any) => {
+    const visit = (node: any): void => {
+      if (!Array.isArray(node.children)) return;
+      const next: any[] = [];
+      for (const child of node.children) {
+        if (child.type === "text" && typeof child.value === "string" && child.value.includes("==")) {
+          const parts = child.value.split(/==(.*?)==/g);
+          parts.forEach((part: string, index: number) => {
+            if (!part) return;
+            if (index % 2 === 1) {
+              next.push({ type: "strong", data: { hProperties: { className: ["answer-underline"] } }, children: [{ type: "text", value: part }] });
+            } else {
+              next.push({ type: "text", value: part });
+            }
+          });
+        } else {
+          visit(child);
+          next.push(child);
+        }
+      }
+      node.children = next;
+    };
+    visit(tree);
+  };
+}
+
 export default function App() {
   const [messages, setMessages] = useState<Message[]>(readMessages);
   const [mode, setMode] = useState<Mode>("online");
@@ -404,7 +431,7 @@ export default function App() {
           {messages.map((m, i) => <article className={`message ${m.role}`} key={i}>
             <div className="message-avatar">{m.role === "assistant" ? <span>QQ</span> : "Вы"}</div>
             <div className="message-body"><div className="sender">{m.role === "assistant" ? "QQ AI" : "Вы"}</div>
-              <div className={`bubble ${m.role === "assistant" ? "markdown-body" : "user-text"}`}>{m.content ? (m.role === "assistant" ? <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>{m.content}</ReactMarkdown> : m.content) : (busy ? <span className="typing"><i/><i/><i/></span> : "")}</div>
+              <div className={`bubble ${m.role === "assistant" ? "markdown-body" : "user-text"}`}>{m.content ? (m.role === "assistant" ? <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkAnswerUnderline]} rehypePlugins={[rehypeKatex]}>{m.content}</ReactMarkdown> : m.content) : (busy ? <span className="typing"><i/><i/><i/></span> : "")}</div>
               {m.role === "assistant" && m.content && <div className="feedback"><button title="Полезный ответ" onClick={() => void rateAnswer(1)}>↑</button><button title="Неудачный ответ" onClick={() => void rateAnswer(-1)}>↓</button><small>Оценить ответ</small></div>}
             </div>
           </article>)}
