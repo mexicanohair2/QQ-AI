@@ -1,30 +1,40 @@
 # QQ AI
 
-QQ AI — independent mobile-first AI assistant prototype. This repository is separate from QQCross.
+QQ AI — независимый мобильный ИИ-помощник. Проект развивается отдельно от QQCross.
 
-## Current milestone: first real AI conversation
+## Режимы работы
 
-- Real local inference through **Qwen2.5-0.5B-Instruct** using WebLLM and WebGPU.
-- No mock replies and no online inference requests.
-- Model is downloaded only after the user taps **Загрузить ИИ-модель**.
-- Conversation is stored locally in the browser.
-- Model weights are cached by WebLLM/browser where supported.
-- First model download is large (around 1 GB); a compatible WebGPU browser and enough available device memory are required.
-- If WebGPU is unavailable or the device cannot allocate model memory, local inference will not start. This has not yet been verified on the target HONOR phone.
+- **Онлайн:** запросы идут через защищённую серверную функцию к Vercel AI Gateway. Секретный ключ не попадает в браузер.
+- **Офлайн:** Qwen2.5-0.5B запускается на устройстве через WebLLM и WebGPU. Пользователь сам решает, загружать ли модель заранее.
+- Офлайн-модель кэшируется в IndexedDB. После успешной загрузки повторно скачивать её при каждом переключении не нужно, пока браузер не очистит данные сайта.
+- Для офлайн-загрузки нужен совместимый WebGPU-браузер, свободная память и интернет только на время первой загрузки.
 
-## Preview
+## Облако и память
 
-GitHub Pages: https://mexicanohair2.github.io/QQ-AI/
+- Supabase Auth — вход по электронной почте.
+- История диалогов, настройки памяти и оценки ответов хранятся в Supabase.
+- Row Level Security ограничивает доступ владельцем строк.
+- Память выключена по умолчанию. Пользователь сам добавляет то, что QQ AI может учитывать.
+- Оценки ответов сохраняют только рейтинг, без копирования полного запроса/ответа в отдельный датасет.
+- QQ AI не переобучает базовую модель на переписке. Персонализация через явную память и обратную связь — отдельный механизм.
 
-## Development
+## Требования для включения облачного ИИ
+
+Добавить в Vercel Environment Variables:
+- `AI_GATEWAY_API_KEY` — секретный ключ Vercel AI Gateway.
+- `AI_MODEL` — необязательно; по умолчанию `google/gemini-2.5-flash`.
+
+Ключ хранится только на сервере. Не помещать его в `VITE_*` переменные и не коммитить в Git.
+
+## Разработка
 
 - `npm install`
 - `npm run dev`
 - `npm run typecheck`
 - `npm run build`
 
-## Current limitations
+## Ограничения прототипа
 
-This is the first real-inference milestone, not the final QQ AI product. Qwen 0.5B is intentionally small for an initial on-device test and is less capable than larger models. Online routing, accounts, synchronized memory, voice, tools, and QQCross integration are not implemented yet.
-
-No conversation content is sent to an online model provider in this version. Model files are downloaded from the WebLLM model host only after the user explicitly starts setup.
+- Qwen 0.5B — небольшая модель для офлайн-доступа; качество заметно ниже современных облачных моделей.
+- Онлайн-режим требует действующего AI Gateway ключа и может тарифицироваться провайдером.
+- История синхронизируется после входа; без входа переписка остаётся только в браузере.
