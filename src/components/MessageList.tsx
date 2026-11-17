@@ -31,8 +31,13 @@ export function MessageList({ messages, onRetry }: MessageListProps) {
 
   return (
     <section className="message-list" aria-label="История сообщений" aria-live="polite">
-      {messages.map((message) => (
-        <MessageBubble key={message.id} message={message} onRetry={onRetry} />
+      {messages.map((message, index) => (
+        <MessageBubble
+          key={message.id}
+          message={message}
+          onRetry={onRetry}
+          canRetry={index === messages.length - 1}
+        />
       ))}
       <div ref={endRef} />
     </section>
