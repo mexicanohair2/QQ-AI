@@ -32,8 +32,10 @@ export default function App() {
     try {
       if (!("gpu" in navigator)) throw new Error("Этот браузер не предоставляет WebGPU. Локальная модель пока не поддерживается в нём.");
       setStatus("Загружаем Qwen 0.5B. Первый запуск потребует около 1 ГБ свободной памяти и загрузки модели.");
-      const { CreateMLCEngine } = await import("@mlc-ai/web-llm");
+      const { CreateMLCEngine, prebuiltAppConfig } = await import("@mlc-ai/web-llm");
+      const appConfig = { ...prebuiltAppConfig, cacheBackend: "indexeddb" as const };
       const created = await CreateMLCEngine(MODEL_ID, {
+        appConfig,
         initProgressCallback: (report: { progress: number; text: string }) => {
           setProgress(Math.max(0, Math.min(100, Math.round(report.progress * 100))));
           setStatus(report.text || "Подготавливаем модель…");
@@ -42,7 +44,16 @@ export default function App() {
       engine.current = created;
       setReady(true); setStatus("QQ AI готов к диалогу");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Не удалось загрузить модель.");
+      const message = e instanceof Error ? e.message : "Не удалось загрузить модель.";
+      let storageHint = "";
+      try {
+        const estimate = await navigator.storage?.estimate?.();
+        if (estimate?.quota && estimate?.usage !== undefined) {
+          const freeMb = Math.max(0, Math.round((estimate.quota - estimate.usage) / 1024 / 1024));
+          storageHint = ` Доступный лимит хранилища браузера: примерно ${freeMb} МБ.`;
+        }
+      } catch { /* storage estimate is optional */ }
+      setError(message + storageHint + " Попробуй повторить загрузку при стабильном Wi‑Fi.");
       setStatus("Модель не запущена");
     } finally { setBusy(false); }
   }
