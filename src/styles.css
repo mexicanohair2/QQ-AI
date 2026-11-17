@@ -200,3 +200,8 @@ body{
   .topbar{background:linear-gradient(100deg,#281624ed,#1c1428f2)}
   .history-sidebar{background:linear-gradient(180deg,#2a1728fa,#1c1427fc)}
 }
+
+
+/* Slightly narrower history panel for more room to chat */
+.history-sidebar{width:232px;padding-left:12px;padding-right:12px}
+@media(max-width:650px){.history-sidebar{width:min(224px,68vw);padding:12px 10px}}
