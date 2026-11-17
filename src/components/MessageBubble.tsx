@@ -3,9 +3,10 @@ import type { ChatMessage } from "../types/chat";
 interface MessageBubbleProps {
   message: ChatMessage;
   onRetry: () => void;
+  canRetry: boolean;
 }
 
-export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
+export function MessageBubble({ message, onRetry, canRetry }: MessageBubbleProps) {
   const isUser = message.role === "user";
   async function copyMessage() {
     try {
@@ -29,7 +30,7 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
             <p>{message.content}</p>
           )}
         </div>
-        {message.status === "error" && !isUser && (
+        {message.status === "error" && !isUser && canRetry && (
           <button className="message__action" type="button" onClick={onRetry}>Повторить</button>
         )}
         {message.status === "complete" && message.content && (
