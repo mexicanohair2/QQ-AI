@@ -15,7 +15,12 @@
     "@vitejs/plugin-react": "latest",
     "vite": "latest",
     "react": "latest",
-    "react-dom": "latest"
+    "react-dom": "latest",
+    "katex": "^0.16.22",
+    "react-markdown": "^10.1.0",
+    "rehype-katex": "^7.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0"
   },
   "devDependencies": {
     "typescript": "latest",
