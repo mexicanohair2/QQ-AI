@@ -25,9 +25,9 @@ export function ChatComposer({ onSend, disabled, isGenerating, onStop }: ChatCom
         submit();
       }}
     >
-      <label className="sr-only" htmlFor="chat-prompt">Сообщение для QQ AI</label>
       <textarea
         id="chat-prompt"
+        aria-label="Сообщение для QQ AI"
         value={value}
         onChange={(event) => setValue(event.target.value)}
         onKeyDown={(event) => {
