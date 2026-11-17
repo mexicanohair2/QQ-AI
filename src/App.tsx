@@ -1,4 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import { createClient, type Session } from "@supabase/supabase-js";
 
 type Message = { role: "user" | "assistant"; content: string };
@@ -6,7 +11,7 @@ type Mode = "online" | "offline";
 const MODEL_ID = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
 const CHAT_KEY = "qq-ai-chat-v2";
 const THREAD_KEY = "qq-ai-thread-v1";
-const SYSTEM = "Ты QQ AI — полезный, честный и спокойный ИИ-помощник. Отвечай на языке пользователя. Если не знаешь ответа, прямо скажи об этом. Не выдумывай факты.";
+const SYSTEM = `Ты QQ AI — полезный, честный и спокойный ИИ-помощник. Отвечай на языке пользователя. Если не знаешь ответа, прямо скажи об этом. Не выдумывай факты.\n\nФОРМАТ ОТВЕТОВ:\n- Используй Markdown: короткие жирные заголовки, абзацы, списки и таблицы, когда они действительно улучшают читаемость.\n- Ссылки оформляй как [понятный текст](https://...). Не создавай вымышленные ссылки.\n- В математике показывай понятные шаги и записывай формулы через LaTeX: $...$ внутри строки и $...$ отдельным блоком.\n- В конце математического решения выделяй итог одной строкой в формате ==Ответ: ...==; для уравнений по возможности используй \\boxed{...}.\n- Не называй ответ правильным, если вычисления не проверены. После решения проверь подстановкой или обратным вычислением, когда это возможно.\n- Завершай выполненную задачу ясным результатом, не продолжай работу без необходимости.`;
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
 const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
@@ -24,6 +29,10 @@ export default function App() {
   const [status, setStatus] = useState("Онлайн-режим");
   const [progress, setProgress] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [notifyOnComplete, setNotifyOnComplete] = useState(() => {
+    try { return localStorage.getItem("qq-ai-notify-complete") === "1"; }
+    catch { return false; }
+  });
   const [offlineReady, setOfflineReady] = useState(false);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState("");
@@ -213,6 +222,38 @@ export default function App() {
     return answer;
   }
 
+  async function toggleCompletionNotifications() {
+    if (notifyOnComplete) {
+      setNotifyOnComplete(false);
+      try { localStorage.removeItem("qq-ai-notify-complete"); } catch { /* storage may be unavailable */ }
+      return;
+    }
+    if (!("Notification" in window)) {
+      setError("Этот браузер не поддерживает уведомления.");
+      return;
+    }
+    const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+    if (permission === "granted") {
+      setNotifyOnComplete(true);
+      try { localStorage.setItem("qq-ai-notify-complete", "1"); } catch { /* storage may be unavailable */ }
+      setError("");
+    } else {
+      setError("Уведомления не разрешены. Их можно включить в настройках браузера.");
+    }
+  }
+
+  async function notifyTaskComplete() {
+    if (!notifyOnComplete || !document.hidden || !("Notification" in window) || Notification.permission !== "granted") return;
+    try {
+      const registration = "serviceWorker" in navigator ? await navigator.serviceWorker.getRegistration() : undefined;
+      if (registration?.showNotification) {
+        await registration.showNotification("QQ AI завершил задачу", { body: "Ответ готов. Можно вернуться к диалогу.", tag: "qq-ai-task-complete" });
+      } else {
+        new Notification("QQ AI завершил задачу", { body: "Ответ готов. Можно вернуться к диалогу." });
+      }
+    } catch { /* notification support varies by browser and platform */ }
+  }
+
   async function send() {
     const content = draft.trim();
     if (!content || busy) return;
@@ -223,7 +264,8 @@ export default function App() {
     try {
       if (mode === "online") await sendOnline(next);
       else await sendOffline(next);
-      setStatus(mode === "online" ? "Ответ получен от облачной модели" : "Ответ создан на устройстве");
+      setStatus("Задача завершена");
+      await notifyTaskComplete();
     } catch (e) {
       setMessages(next);
       setError(e instanceof Error ? e.message : "Не удалось получить ответ.");
@@ -362,7 +404,7 @@ export default function App() {
           {messages.map((m, i) => <article className={`message ${m.role}`} key={i}>
             <div className="message-avatar">{m.role === "assistant" ? <span>QQ</span> : "Вы"}</div>
             <div className="message-body"><div className="sender">{m.role === "assistant" ? "QQ AI" : "Вы"}</div>
-              <div className="bubble">{m.content || (busy ? <span className="typing"><i/><i/><i/></span> : "")}</div>
+              <div className={`bubble ${m.role === "assistant" ? "markdown-body" : "user-text"}`}>{m.content ? (m.role === "assistant" ? <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>{m.content}</ReactMarkdown> : m.content) : (busy ? <span className="typing"><i/><i/><i/></span> : "")}</div>
               {m.role === "assistant" && m.content && <div className="feedback"><button title="Полезный ответ" onClick={() => void rateAnswer(1)}>↑</button><button title="Неудачный ответ" onClick={() => void rateAnswer(-1)}>↓</button><small>Оценить ответ</small></div>}
             </div>
           </article>)}
@@ -372,12 +414,13 @@ export default function App() {
 
       {error && <div className="error-banner">{error}</div>}
       {mode === "offline" && !offlineReady && messages.length > 0 && <div className="offline-inline"><span>Офлайн-модель не загружена</span><button onClick={loadOfflineModel} disabled={busy}>Подготовить</button>{busy && <span>{progress}%</span>}</div>}
+      {busy && <div className="task-running"><span className="task-running-dot" /><span><b>QQ AI выполняет задачу</b><small>Можно переключиться на другую вкладку. Не закрывай браузер, пока ответ не готов.</small></span></div>}
       <footer className="composer-area">
         <div className="composer">
           <textarea value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }} placeholder={mode === "online" ? "Спросите о чём угодно…" : offlineReady ? "Сообщение для локальной модели…" : "Сначала подготовьте офлайн-модель"} rows={1} disabled={busy || (mode === "offline" && !offlineReady)} />
           <button className="send-button" onClick={() => void send()} disabled={!draft.trim() || busy || (mode === "offline" && !offlineReady)} aria-label="Отправить"><span>↑</span></button>
         </div>
-        <div className="composer-meta"><span>{status}</span><span>{modeLabel} · {mode === "offline" ? "Qwen 0.5B" : "Cerebras GLM 4.7 · облачная модель"}</span></div>
+        <div className="composer-meta"><span>{status}</span><span className="composer-meta-actions"><button className={`notification-toggle ${notifyOnComplete ? "enabled" : ""}`} onClick={() => void toggleCompletionNotifications()} title="Уведомить, когда задача завершится">{notifyOnComplete ? "Уведомления включены" : "Уведомлять о готовности"}</button><span>{modeLabel} · {mode === "offline" ? "Qwen 0.5B" : "Cerebras GLM 4.7 · облачная модель"}</span></span></div>
       </footer>
     </section>
 
