@@ -9,7 +9,7 @@
 
 QQ AI is a mobile-first personal AI assistant developed as an independent product and repository. The first goal is to create a reliable prototype that can be tested separately from QQCross. Once the prototype is stable and its behavior is verified, selected components may later be integrated with QQCross.
 
-The product should feel like a capable, responsive assistant rather than a thin chat wrapper. Its interface should be calm and polished, with smooth transitions, a distinctive spherical energy avatar, and a restrained dark burgundy-purple visual identity.
+The product should feel like a capable, responsive assistant rather than a thin chat wrapper. Its interface should be calm and polished, with smooth transitions, a distinctive spherical energy avatar, and a restrained dark burgundy-purple visual identity. Kimi is a usability reference for conversational flow, not a template to copy; QQ AI should have its own interaction design and visual identity.
 
 ## 2. Goals
 
@@ -19,6 +19,7 @@ The product should feel like a capable, responsive assistant rather than a thin 
 - Work well on mobile browsers and be installable as a PWA where supported.
 - Keep the application usable when offline for supported local-model tasks.
 - Add voice input and spoken responses as capabilities, with graceful fallbacks.
+- Establish an extensible tool/action layer so future assistant capabilities can be added without coupling them to a specific model provider.
 - Keep user conversations, preferences, and assistant memory logically separated by account.
 - Prepare for eventual shared QQ account authentication with QQCross without coupling the prototype to QQCross prematurely.
 - Protect per-user online usage quotas and prevent one user's activity from consuming another user's personal allowance.
@@ -95,7 +96,13 @@ The interface must adapt to narrow screens, virtual keyboards, browser safe area
 - Spoken output should use the device's available speech synthesis first, with an optional higher-quality online provider later.
 - Voice is optional; text chat must remain fully usable.
 
-### 6.5 Memory and personalization
+### 6.5 Tools and extended capabilities
+
+- Keep tool invocation behind a permission-aware orchestration layer rather than embedding app actions directly in model prompts.
+- Each tool must declare its inputs, permissions, confirmation requirements, and failure behavior.
+- Start with a small, safe set of capabilities; add external integrations only when their value and permission boundaries are clear.
+
+### 6.6 Memory and personalization
 
 - Conversation history and user preferences should be stored separately per account.
 - Memory should be inspectable and controllable by the user.
