@@ -105,15 +105,19 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     }
     case "generation/stop": {
       if (state.generationId !== action.generationId) return state;
-      const next = updateConversation(state, action.conversationId, (conversation) => ({
-        ...conversation,
-        messages: conversation.messages.map((message) =>
-          message.id === action.assistantMessageId && message.status === "pending"
-            ? { ...message, status: "error" }
-            : message,
-        ),
-      }));
-      return { ...next, generationId: null };
+      const conversations = state.conversations.map((conversation) =>
+        conversation.id !== action.conversationId
+          ? conversation
+          : {
+              ...conversation,
+              messages: conversation.messages.map((message) =>
+                message.id === action.assistantMessageId && message.status === "pending"
+                  ? { ...message, status: "error" as const }
+                  : message,
+              ),
+            },
+      );
+      return { ...state, conversations, generationId: null };
     }
     case "conversation/delete": {
       const conversations = state.conversations.filter((item) => item.id !== action.id);
