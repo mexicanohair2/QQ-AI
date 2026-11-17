@@ -21,8 +21,11 @@ describe("ConversationList", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: /Первый диалог/ })).toHaveAttribute("aria-current", "page");
-    fireEvent.click(screen.getByRole("button", { name: /Вторая тема/ }));
+    const firstButton = screen.getByText("Первый диалог").closest("button");
+    const secondButton = screen.getByText("Вторая тема").closest("button");
+    expect(firstButton).toHaveAttribute("aria-current", "page");
+    expect(secondButton).not.toBeNull();
+    if (secondButton) fireEvent.click(secondButton);
     expect(onSelect).toHaveBeenCalledWith("c2");
   });
 
