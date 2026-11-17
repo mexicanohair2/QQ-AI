@@ -40,6 +40,7 @@ This plan implements only the independent chat prototype (design Phase 1). Local
 
 - Create `package.json`, `index.html`, `vite.config.ts`, `tsconfig.json`, and `tsconfig.node.json` for the build and type-check setup.
 - Create `src/main.tsx` and `src/App.tsx` as the application entry and composition root.
+- Create `src/App.test.tsx` for the application smoke test.
 - Create `src/styles/tokens.css` and `src/styles/global.css` for the design tokens, responsive layout, and accessible motion behavior.
 - Create `src/types/chat.ts` for conversation/message contracts.
 - Create `src/lib/id.ts` for stable client-side IDs.
@@ -65,7 +66,7 @@ This plan implements only the independent chat prototype (design Phase 1). Local
 - Create: `src/App.tsx`
 - Create: `src/test/setup.ts`
 - Create: `src/test/test-utils.tsx`
-- Test: `src/App.test.tsx)
+- Test: `src/App.test.tsx`
 
 **Interfaces:**
 - App entry exports the default React component from `src/App.tsx`.
