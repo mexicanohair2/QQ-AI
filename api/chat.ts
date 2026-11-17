@@ -21,7 +21,7 @@ export default async function handler(request: Request): Promise<Response> {
       method: "POST",
       headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: process.env.AI_MODEL || "openai/gpt-4o-mini",
+        model: "openai/gpt-4o-mini",
         messages: body.messages,
         temperature: 0.7,
         max_tokens: 1800,
