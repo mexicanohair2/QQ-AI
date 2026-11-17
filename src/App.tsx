@@ -377,7 +377,7 @@ export default function App() {
           <textarea value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }} placeholder={mode === "online" ? "Спросите о чём угодно…" : offlineReady ? "Сообщение для локальной модели…" : "Сначала подготовьте офлайн-модель"} rows={1} disabled={busy || (mode === "offline" && !offlineReady)} />
           <button className="send-button" onClick={() => void send()} disabled={!draft.trim() || busy || (mode === "offline" && !offlineReady)} aria-label="Отправить"><span>↑</span></button>
         </div>
-        <div className="composer-meta"><span>{status}</span><span>{modeLabel} · {mode === "offline" ? "Qwen 0.5B" : "GPT-4o mini · возможна тарификация"}</span></div>
+        <div className="composer-meta"><span>{status}</span><span>{modeLabel} · {mode === "offline" ? "Qwen 0.5B" : "Cerebras GLM 4.7 · облачная модель"}</span></div>
       </footer>
     </section>
 
