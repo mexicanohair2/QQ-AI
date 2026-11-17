@@ -1,7 +1,7 @@
 {
   "name": "qq-ai",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@mlc-ai/web-llm": "0.2.88",
+    "@supabase/supabase-js": "2.57.4",
     "@vitejs/plugin-react": "latest",
     "vite": "latest",
     "react": "latest",
