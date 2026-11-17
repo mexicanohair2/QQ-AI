@@ -10,7 +10,7 @@
     "typecheck": "tsc -b"
   },
   "dependencies": {
-    "@mlc-ai/web-llm": "0.2.80",
+    "@mlc-ai/web-llm": "0.2.88",
     "@vitejs/plugin-react": "latest",
     "vite": "latest",
     "react": "latest",
