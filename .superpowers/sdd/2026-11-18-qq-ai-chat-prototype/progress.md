@@ -16,3 +16,16 @@ Task 2: complete (commits 1a91a3d..1641cc0, tests: GitHub Actions run 4419005262
 Task 2: Ruling: Keep mock-provider replies explicitly labelled as demonstration-only and avoid even a simulated network delay — users must not mistake prototype text for a live model response — cost if wrong: the first prototype will feel less like a finished AI until Qwen/online inference is integrated.
 
 Task 3: complete (commits 1641cc0..11457a5, tests: GitHub Actions run 44190436834 → PASS; 4 test files, 14 tests, typecheck PASS, production build PASS).
+
+
+Task 4: complete (useChat reducer orchestration, restore, persistence, cancellation, stale-response protection, retry without duplicate prompt). GitHub Actions run 44196788552 → PASS; 7 test files, 29 tests, TypeScript PASS, Vite production build PASS, production npm audit PASS.
+
+Task 5: complete (responsive mobile-first UI, conversation navigation, create/delete, composer, stop, retry, copy, visible demo status). Regression fixes: lock composer during generation to prevent losing a typed message; restore the most recently updated conversation first. Covered by tests in App, ChatComposer, and ConversationList. Latest code verification: run 44196788552 → PASS.
+
+Task 6: complete. GitHub Pages could not be enabled because the repository's GITHUB_TOKEN lacked permission to create a Pages site; the failed Pages workflow was removed. After user-authorized Vercel team access, deployed exact feature-branch commit 2cde9923ad87eb706a9a9db8346714a49d06fdfe as project qq-ai-preview. Deployment dpl_2WGfnRDCgtEYL2P1jw1LvNqL2ZMJ reached READY; public URL https://qq-ai-preview.vercel.app. Project SSO protection is disabled for this public static demo. Firecrawl browser verification: page opened without sign-in; title QQ AI and composer visible; test prompt "Проверка первого запроса QQ AI" was sent with Enter and the explicit demo response appeared. No physical-device verification is claimed.
+
+Task 7: partial complete. Verified full CI, production dependency audit, no provider inference requests in the mock provider, no client provider secrets, and no QQCross/main modifications. README records the public preview URL, browser-local IndexedDB behavior, and the mock-only inference limitation. Remaining: real-device viewport/keyboard/reduced-motion acceptance and independent subagent review (no review subagent available in this environment; manual code review was performed).
+
+Ruling: Vite 8.3.8, @vitejs/plugin-react 6.3.0, Vitest 5.1.0, Node 24 CI. Commit package-lock.json and use npm ci for repeatable installs. Production audit gate passes. Full npm audit still reports six high-severity dev-toolchain graph entries tied to upstream picomatch advisory GHSA-fc5q-39xc-vjpf; do not suppress or force-downgrade until an upstream patched release is available.
+
+Isolation: all project changes remain in feature/qq-ai-chat-prototype. Main remains at its existing revision; QQCross was not accessed or modified.
