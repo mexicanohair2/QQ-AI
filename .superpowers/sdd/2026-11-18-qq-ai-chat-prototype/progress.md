@@ -14,3 +14,5 @@ Task 1: Ruling: Pin compatible dependencies to exact versions rather than mutabl
 Task 2: complete (commits 1a91a3d..1641cc0, tests: GitHub Actions run 44190052628 → PASS; 3 test files, 11 tests, typecheck PASS, production build PASS).
 
 Task 2: Ruling: Keep mock-provider replies explicitly labelled as demonstration-only and avoid even a simulated network delay — users must not mistake prototype text for a live model response — cost if wrong: the first prototype will feel less like a finished AI until Qwen/online inference is integrated.
+
+Task 3: complete (commits 1641cc0..11457a5, tests: GitHub Actions run 44190436834 → PASS; 4 test files, 14 tests, typecheck PASS, production build PASS).
