@@ -37,6 +37,8 @@ export default function App() {
   const [memoryDraft, setMemoryDraft] = useState("");
   const [memories, setMemories] = useState<string[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [threads, setThreads] = useState<Array<{id:string;title:string;updated_at:string}>>([]);
   const [cloudStatus, setCloudStatus] = useState("Только на этом устройстве");
   const [cloudLoaded, setCloudLoaded] = useState(false);
   const [threadId, setThreadId] = useState(() => {
@@ -275,6 +277,20 @@ export default function App() {
     if (feedbackError) setError("Не удалось сохранить оценку: " + feedbackError.message);
   }
 
+  async function showHistory() {
+    if (!supabase || !session?.user) { setAuthOpen(true); return; }
+    const { data, error: historyError } = await supabase.from("qq_ai_threads").select("id,title,updated_at").order("updated_at", { ascending: false }).limit(30);
+    if (historyError) { setError("Не удалось загрузить историю: " + historyError.message); return; }
+    setThreads(data || []); setHistoryOpen(true);
+  }
+
+  async function openThread(id: string) {
+    if (!supabase) return;
+    const { data, error: threadError } = await supabase.from("qq_ai_threads").select("id,messages").eq("id", id).single();
+    if (threadError) { setError("Не удалось открыть диалог: " + threadError.message); return; }
+    setThreadId(data.id); setMessages(Array.isArray(data.messages) ? data.messages as Message[] : []); setHistoryOpen(false);
+  }
+
   function newChat() {
     if (busy) return;
     setMessages([]);
@@ -288,6 +304,7 @@ export default function App() {
     <aside className="rail">
       <button className="brand-mark" aria-label="QQ AI">QQ</button>
       <button className="rail-action active" title="Новый диалог" onClick={newChat}>＋</button>
+      <button className="rail-action" title="История диалогов" onClick={() => void showHistory()}>☷</button>
       <button className="rail-action" title="Настройки памяти" onClick={() => setSettingsOpen(true)}>✧</button>
       <div className="rail-spacer" />
       <button className="avatar-button" title={session?.user.email || "Войти"} onClick={() => setAuthOpen(true)}>{session?.user.email?.[0]?.toUpperCase() || "↗"}</button>
@@ -297,6 +314,7 @@ export default function App() {
       <header className="topbar">
         <div className="top-brand"><span className="brand-orb">QQ</span><div><strong>QQ AI</strong><small>Ваше пространство для идей</small></div></div>
         <div className="top-actions">
+          <button className="cloud-pill" onClick={() => setAuthOpen(true)}><span className={session ? "cloud-dot connected" : "cloud-dot"} />{session ? "Облако" : "Синхронизация"}</button>
           <div className="mode-switch" aria-label="Режим работы">
             <button className={mode === "online" ? "selected" : ""} onClick={() => { setMode("online"); setError(""); setStatus("Онлайн-режим"); }}>Онлайн</button>
             <button className={mode === "offline" ? "selected" : ""} onClick={() => { setMode("offline"); setError(""); setStatus(offlineReady ? "Офлайн-модель готова" : "Сначала подготовь офлайн-модель"); }}>Офлайн</button>
@@ -327,7 +345,7 @@ export default function App() {
             <div className="message-avatar">{m.role === "assistant" ? <span>QQ</span> : "Вы"}</div>
             <div className="message-body"><div className="sender">{m.role === "assistant" ? "QQ AI" : "Вы"}</div>
               <div className="bubble">{m.content || (busy ? <span className="typing"><i/><i/><i/></span> : "")}</div>
-              {m.role === "assistant" && m.content && <div className="feedback"><button title="Полезный ответ" onClick={() => void rateAnswer(1)}>♧</button><button title="Неудачный ответ" onClick={() => void rateAnswer(-1)}>♧</button><small>Оценить ответ</small></div>}
+              {m.role === "assistant" && m.content && <div className="feedback"><button title="Полезный ответ" onClick={() => void rateAnswer(1)}>↑</button><button title="Неудачный ответ" onClick={() => void rateAnswer(-1)}>↓</button><small>Оценить ответ</small></div>}
             </div>
           </article>)}
           <div ref={bottom} />
@@ -349,6 +367,11 @@ export default function App() {
       <button className="modal-close" onClick={() => setAuthOpen(false)}>×</button><div className="modal-symbol">QQ</div><h2>{session ? "Аккаунт QQ AI" : "Синхронизация с облаком"}</h2>
       {session ? <><p>Вход выполнен: {session.user.email}. История и память синхронизируются с облаком.</p><button className="secondary-button" onClick={async () => { await supabase?.auth.signOut(); setAuthOpen(false); }}>Выйти</button></> :
       <><p>Войди по электронной почте, чтобы сохранять диалоги и настройки между устройствами.</p><input className="modal-input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Электронная почта" disabled={otpSent} />{otpSent ? <><input className="modal-input" inputMode="numeric" value={otpCode} onChange={e => setOtpCode(e.target.value)} placeholder="Код из письма" /><button className="primary full" onClick={() => void verifyEmailCode()}>Подтвердить код</button><button className="secondary-button full" onClick={() => { setOtpSent(false); setOtpCode(""); setAuthMessage(""); }}>Изменить почту</button></> : <button className="primary full" onClick={() => void signIn()}>Получить код для входа</button>}<small>{authMessage}</small></>}
+    </section></div>}
+
+    {historyOpen && <div className="modal-backdrop" onClick={() => setHistoryOpen(false)}><section className="modal history-modal" onClick={e => e.stopPropagation()}>
+      <button className="modal-close" onClick={() => setHistoryOpen(false)}>×</button><div className="eyebrow">ОБЛАЧНОЕ ХРАНИЛИЩЕ</div><h2>История диалогов</h2>
+      {threads.length ? <ul className="history-list">{threads.map(t => <li key={t.id}><button onClick={() => void openThread(t.id)}><b>{t.title || "Новый диалог"}</b><small>{new Date(t.updated_at).toLocaleString("ru-RU")}</small></button></li>)}</ul> : <p>В облаке пока нет сохранённых диалогов.</p>}
     </section></div>}
 
     {settingsOpen && <div className="modal-backdrop" onClick={() => setSettingsOpen(false)}><section className="modal settings-modal" onClick={e => e.stopPropagation()}>
