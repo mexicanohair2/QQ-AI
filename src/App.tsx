@@ -229,10 +229,10 @@ export default function App() {
     setAuthMessage("Отправляем ссылку для входа…");
     const { error: authError } = await supabase.auth.signInWithOtp({
       email: email.trim(),
-      options: { shouldCreateUser: true },
+      options: { shouldCreateUser: true, emailRedirectTo: window.location.origin },
     });
     if (authError) setAuthMessage(authError.message);
-    else { setOtpSent(true); setAuthMessage("Проверь почту: введи одноразовый код из письма."); }
+    else { setOtpSent(true); setAuthMessage("Проверь почту: открой ссылку для входа или введи код, если письмо пришло с кодом."); }
   }
 
   async function verifyEmailCode() {
