@@ -5,10 +5,10 @@ export default async function handler(request: Request): Promise<Response> {
     new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
   if (request.method !== "POST") return json({ error: "Метод не поддерживается." }, 405);
-  const apiKey = process.env.AI_GATEWAY_API_KEY;
+  const apiKey = process.env.AI_GATEWAY_API_KEY || request.headers.get("x-vercel-oidc-token") || process.env.VERCEL_OIDC_TOKEN;
   if (!apiKey) {
     return json({
-      error: "Онлайн-модель пока не подключена: на сервере не задан AI_GATEWAY_API_KEY. QQ AI не отправляет запросы в случайный сервис. После подключения ключа облачный режим заработает."
+      error: "Не удалось получить учётные данные Vercel AI Gateway. Проверь, включён ли AI Gateway для проекта QQ AI в Vercel."
     }, 503);
   }
 
