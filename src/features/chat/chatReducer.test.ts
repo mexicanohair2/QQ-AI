@@ -71,7 +71,7 @@ describe("chatReducer", () => {
       chatReducer(initialChatState, { type: "conversation/create", conversation }),
       { type: "message/submit", conversationId: "c1", userMessage, assistantMessage, generationId: "g1" },
     );
-    const stopped = chatReducer(started, { type: "generation/stop", generationId: "g1" });
+    const stopped = chatReducer(started, { type: "generation/stop", generationId: "g1", conversationId: "c1", assistantMessageId: "m2" });
     const stale = chatReducer(stopped, {
       type: "assistant/complete", conversationId: "c1", assistantMessageId: "m2",
       generationId: "g1", content: "Поздний ответ", updatedAt: 14,
@@ -79,6 +79,33 @@ describe("chatReducer", () => {
     expect(stopped.generationId).toBeNull();
     expect(stopped.conversations[0].messages[1].status).toBe("error");
     expect(stale).toBe(stopped);
+  });
+
+  it("retries an errored assistant message without duplicating the user message", () => {
+    const started = chatReducer(
+      chatReducer(initialChatState, { type: "conversation/create", conversation }),
+      { type: "message/submit", conversationId: "c1", userMessage, assistantMessage, generationId: "g1" },
+    );
+    const failed = chatReducer(started, {
+      type: "assistant/fail", conversationId: "c1", assistantMessageId: "m2", generationId: "g1",
+    });
+    const retried = chatReducer(failed, {
+      type: "message/retry", conversationId: "c1", assistantMessageId: "m2", generationId: "g2", updatedAt: 14,
+    });
+    expect(retried.generationId).toBe("g2");
+    expect(retried.conversations[0].messages).toHaveLength(2);
+    expect(retried.conversations[0].messages[0].id).toBe("m1");
+    expect(retried.conversations[0].messages[1]).toMatchObject({ id: "m2", status: "pending", content: "" });
+  });
+
+  it("restores unfinished responses as retryable errors", () => {
+    const restored = chatReducer(initialChatState, {
+      type: "state/restore",
+      conversations: [{ ...conversation, messages: [userMessage, assistantMessage] }],
+    });
+    expect(restored.activeConversationId).toBe("c1");
+    expect(restored.conversations[0].messages[1].status).toBe("error");
+    expect(restored.generationId).toBeNull();
   });
 
   it("deletes a conversation and clears active generation state", () => {
