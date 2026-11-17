@@ -27,5 +27,6 @@
     "vitest": "5.1.0",
     "@types/node": "22.15.30",
     "fake-indexeddb": "6.2.4"
-  }
+  },
+  "description": "QQ AI — private, mobile-first assistant chat prototype"
 }
