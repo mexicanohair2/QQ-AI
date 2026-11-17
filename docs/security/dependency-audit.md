@@ -16,7 +16,7 @@ The full npm audit reports **6 high-severity dependency entries**, with no criti
 
 The dependency report links these entries to the same underlying high-severity advisory: **GHSA-fc5q-39xc-vjpf / CVE-2026-112366**, a ReDoS issue affecting `picomatch` versions through 4.0.7. The npm audit snapshot was generated on 2026-11-17 and the registry's current `picomatch` release was still 4.0.7. The GitHub advisory did not list a patched package version at the time of review.
 
-This is a **development-toolchain finding**, not a vulnerability in the site's shipped React runtime dependencies. Vite, Vitest, the React Vite plugin, and the globbing packages are dev dependencies. The deployed GitHub Pages site serves static assets; it does not expose the Vite development server or a Node.js inference API.
+This is a **development-toolchain finding**, not a vulnerability in the site's shipped React runtime dependencies. Vite, Vitest, the React Vite plugin, and the globbing packages are dev dependencies. The deployed Vercel preview serves static assets; it does not expose the Vite development server or a Node.js inference API.
 
 ## CI policy
 
