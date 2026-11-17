@@ -21,13 +21,15 @@ function updateConversation(
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     case "state/restore": {
-      const conversations = action.conversations.map((conversation) => ({
-        ...conversation,
-        // A pending request cannot survive a page reload; make it explicitly retryable.
-        messages: conversation.messages.map((message) =>
-          message.status === "pending" ? { ...message, status: "error" as const } : message,
-        ),
-      }));
+      const conversations = action.conversations
+        .map((conversation) => ({
+          ...conversation,
+          // A pending request cannot survive a page reload; make it explicitly retryable.
+          messages: conversation.messages.map((message) =>
+            message.status === "pending" ? { ...message, status: "error" as const } : message,
+          ),
+        }))
+        .sort((a, b) => b.updatedAt - a.updatedAt);
       return {
         conversations,
         activeConversationId: conversations[0]?.id ?? null,
