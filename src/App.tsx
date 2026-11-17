@@ -29,6 +29,8 @@ export default function App() {
   const [error, setError] = useState("");
   const [session, setSession] = useState<Session | null>(null);
   const [email, setEmail] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [authMessage, setAuthMessage] = useState("");
   const [memoryEnabled, setMemoryEnabled] = useState(false);
@@ -225,9 +227,18 @@ export default function App() {
     setAuthMessage("Отправляем ссылку для входа…");
     const { error: authError } = await supabase.auth.signInWithOtp({
       email: email.trim(),
-      options: { emailRedirectTo: window.location.origin },
+      options: { shouldCreateUser: true },
     });
-    setAuthMessage(authError ? authError.message : "Проверь почту: отправили ссылку для входа в QQ AI.");
+    if (authError) setAuthMessage(authError.message);
+    else { setOtpSent(true); setAuthMessage("Проверь почту: введи одноразовый код из письма."); }
+  }
+
+  async function verifyEmailCode() {
+    if (!supabase || !email.trim() || otpCode.trim().length < 6) { setAuthMessage("Введи код из письма."); return; }
+    setAuthMessage("Проверяем код…");
+    const { error: verifyError } = await supabase.auth.verifyOtp({ email: email.trim(), token: otpCode.trim(), type: "email" });
+    setAuthMessage(verifyError ? verifyError.message : "Вход выполнен.");
+    if (!verifyError) { setAuthOpen(false); setOtpSent(false); setOtpCode(""); }
   }
 
   async function saveMemory() {
@@ -337,7 +348,7 @@ export default function App() {
     {authOpen && <div className="modal-backdrop" onClick={() => setAuthOpen(false)}><section className="modal" onClick={e => e.stopPropagation()}>
       <button className="modal-close" onClick={() => setAuthOpen(false)}>×</button><div className="modal-symbol">QQ</div><h2>{session ? "Аккаунт QQ AI" : "Синхронизация с облаком"}</h2>
       {session ? <><p>Вход выполнен: {session.user.email}. История и память синхронизируются с облаком.</p><button className="secondary-button" onClick={async () => { await supabase?.auth.signOut(); setAuthOpen(false); }}>Выйти</button></> :
-      <><p>Войди по электронной почте, чтобы сохранять диалоги и настройки между устройствами.</p><input className="modal-input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Электронная почта" /><button className="primary full" onClick={() => void signIn()}>Отправить ссылку для входа</button><small>{authMessage}</small></>}
+      <><p>Войди по электронной почте, чтобы сохранять диалоги и настройки между устройствами.</p><input className="modal-input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Электронная почта" disabled={otpSent} />{otpSent ? <><input className="modal-input" inputMode="numeric" value={otpCode} onChange={e => setOtpCode(e.target.value)} placeholder="Код из письма" /><button className="primary full" onClick={() => void verifyEmailCode()}>Подтвердить код</button><button className="secondary-button full" onClick={() => { setOtpSent(false); setOtpCode(""); setAuthMessage(""); }}>Изменить почту</button></> : <button className="primary full" onClick={() => void signIn()}>Получить код для входа</button>}<small>{authMessage}</small></>}
     </section></div>}
 
     {settingsOpen && <div className="modal-backdrop" onClick={() => setSettingsOpen(false)}><section className="modal settings-modal" onClick={e => e.stopPropagation()}>
