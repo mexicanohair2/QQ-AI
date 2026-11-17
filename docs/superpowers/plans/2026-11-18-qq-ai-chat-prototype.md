@@ -112,14 +112,14 @@ This plan implements only the independent chat prototype (design Phase 1). Local
 - Create: `src/features/chat/storage.test.ts`
 
 **Interfaces:**
-- `loadConversations(storage?: Storage): Conversation[]` reads and validates the versioned storage record.
-- `saveConversations(conversations: Conversation[], storage?: Storage): void` writes the current schema.
-- Storage key: `qq-ai:chat:v1`.
-- Persistence uses browser `localStorage` for the initial prototype; no secrets or account credentials are stored.
+- `loadConversations(db?: IDBDatabase): Promise<Conversation[]>` reads and validates the versioned IndexedDB record.
+- `saveConversations(conversations: Conversation[], db?: IDBDatabase): Promise<void>` writes the current schema.
+- Database: `qq-ai`; object store: `conversations`; schema version: `1`.
+- Use IndexedDB for structured conversation data; do not store secrets or account credentials.
 
-- [ ] **Step 1: Write tests** — round-trip valid conversations; reject malformed JSON and unknown schema versions; ignore malformed individual records; handle storage read/write exceptions without crashing.
+- [ ] **Step 1: Write tests** — round-trip valid conversations; handle database upgrade/open failure; ignore malformed records; handle transaction read/write errors without crashing.
 - [ ] **Step 2: Run tests and confirm failure**.
-- [ ] **Step 3: Implement schema validation and versioned storage** — validate all required fields and role/status enums before restoring data.
+- [ ] **Step 3: Implement IndexedDB database lifecycle and schema validation** — create the object store in version 1 and validate all required fields and role/status enums before restoring data.
 - [ ] **Step 4: Run storage tests** — all cases must pass.
 - [ ] **Step 5: Commit** — `feat: persist prototype conversations locally`.
 
@@ -131,10 +131,10 @@ This plan implements only the independent chat prototype (design Phase 1). Local
 
 **Interfaces:**
 - `useChat()` returns `state`, `activeConversation`, `sendMessage(content: string)`, `selectConversation(id: string)`, `createConversation()`, `deleteConversation(id: string)`, `stopGeneration()`, and `retryLastMessage()`.
-- On startup, restore validated conversations or create one empty conversation.
-- Every state change is persisted; generation cancellation uses `AbortController`.
+- On startup, restore validated conversations or create one empty conversation; the UI remains usable if IndexedDB is unavailable.
+- Every state change is persisted asynchronously to IndexedDB; generation cancellation uses `AbortController`.
 
-- [ ] **Step 1: Write hook tests** — restore on mount, create first conversation, send user message, append mock reply, cancel generation, retry failed generation, and persist after each transition.
+- [ ] **Step 1: Write hook tests** — restore on mount, create first conversation, send user message, append mock reply, cancel generation, retry failed generation, and persist after each transition, including delayed IndexedDB writes.
 - [ ] **Step 2: Run tests and confirm failure**.
 - [ ] **Step 3: Implement hook orchestration** — prevent duplicate in-flight submissions; ignore stale provider results after cancellation or a newer generation.
 - [ ] **Step 4: Run hook tests and type check**.
@@ -194,7 +194,7 @@ This plan implements only the independent chat prototype (design Phase 1). Local
 - Modify: relevant tests and `README.md` only where a verified defect or missing limitation is found.
 
 - [ ] **Step 1: Run the full test suite, type check, and production build**.
-- [ ] **Step 2: Verify the five Review Focus cases** — narrow viewport/keyboard, empty and long messages, reload and malformed storage, rapid submissions/cancellation, and reduced-motion/no optional APIs.
+- [ ] **Step 2: Verify the five Review Focus cases** — narrow viewport/keyboard, empty and long messages, reload and malformed/unavailable IndexedDB, rapid submissions/cancellation, and reduced-motion/no optional APIs.
 - [ ] **Step 3: Review network behavior** — confirm Phase 1 makes no inference-provider requests and contains no provider secrets.
 - [ ] **Step 4: Review repository diff** — confirm no QQCross repository, schema, or deployment was changed.
 - [ ] **Step 5: Record verified behavior and known limitations in README**.
