@@ -24,6 +24,11 @@ describe("ChatComposer", () => {
     expect(onSend).toHaveBeenCalledWith("Первый запрос");
   });
 
+  it("locks the input while a response is generating", () => {
+    render(<ChatComposer onSend={vi.fn()} disabled={false} isGenerating onStop={vi.fn()} />);
+    expect(screen.getByRole("textbox", { name: "Сообщение для QQ AI" })).toBeDisabled();
+  });
+
   it("offers a stop action while generating", () => {
     const onStop = vi.fn();
     render(<ChatComposer onSend={vi.fn()} disabled={false} isGenerating onStop={onStop} />);
