@@ -38,6 +38,10 @@ export default function App() {
   const [memories, setMemories] = useState<string[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(() => {
+    try { return localStorage.getItem("qq-ai-sidebar-hidden") !== "1"; }
+    catch { return true; }
+  });
   const [threads, setThreads] = useState<Array<{id:string;title:string;updated_at:string}>>([]);
   const [cloudStatus, setCloudStatus] = useState("Только на этом устройстве");
   const [cloudLoaded, setCloudLoaded] = useState(false);
@@ -47,6 +51,11 @@ export default function App() {
   });
   const engine = useRef<any>(null);
   const bottom = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    try { localStorage.setItem("qq-ai-sidebar-hidden", sidebarVisible ? "0" : "1"); }
+    catch { /* local storage may be unavailable */ }
+  }, [sidebarVisible]);
 
   useEffect(() => {
     try {
@@ -301,18 +310,18 @@ export default function App() {
   const modeLabel = useMemo(() => mode === "online" ? "Онлайн" : "Офлайн", [mode]);
 
   return <main className="shell">
-    <aside className="rail">
+    {sidebarVisible && <aside className="rail">
       <button className="brand-mark" aria-label="QQ AI">QQ</button>
       <button className="rail-action active" title="Новый диалог" onClick={newChat}>＋</button>
       <button className="rail-action" title="История диалогов" onClick={() => void showHistory()}>☷</button>
       <button className="rail-action" title="Настройки памяти" onClick={() => setSettingsOpen(true)}>✧</button>
       <div className="rail-spacer" />
       <button className="avatar-button" title={session?.user.email || "Войти"} onClick={() => setAuthOpen(true)}>{session?.user.email?.[0]?.toUpperCase() || "↗"}</button>
-    </aside>
+    </aside>}
 
     <section className="workspace">
       <header className="topbar">
-        <div className="top-brand"><span className="brand-orb">QQ</span><div><strong>QQ AI</strong><small>Ваше пространство для идей</small></div></div>
+        <div className="top-leading"><button className="sidebar-toggle" onClick={() => setSidebarVisible(v => !v)} aria-label={sidebarVisible ? "Скрыть боковую панель" : "Показать боковую панель"} title={sidebarVisible ? "Скрыть боковую панель" : "Показать боковую панель"}>{sidebarVisible ? "‹" : "☰"}</button><div className="top-brand"><span className="brand-orb">QQ</span><div><strong>QQ AI</strong><small>Ваше пространство для идей</small></div></div></div>
         <div className="top-actions">
           <button className="cloud-pill" onClick={() => setAuthOpen(true)}><span className={session ? "cloud-dot connected" : "cloud-dot"} />{session ? "Облако" : "Синхронизация"}</button>
           <div className="mode-switch" aria-label="Режим работы">
@@ -359,7 +368,7 @@ export default function App() {
           <textarea value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }} placeholder={mode === "online" ? "Спросите о чём угодно…" : offlineReady ? "Сообщение для локальной модели…" : "Сначала подготовьте офлайн-модель"} rows={1} disabled={busy || (mode === "offline" && !offlineReady)} />
           <button className="send-button" onClick={() => void send()} disabled={!draft.trim() || busy || (mode === "offline" && !offlineReady)} aria-label="Отправить"><span>↑</span></button>
         </div>
-        <div className="composer-meta"><span>{status}</span><span>{modeLabel} · {mode === "offline" ? "Qwen 0.5B" : "облачная модель · возможна тарификация"}</span></div>
+        <div className="composer-meta"><span>{status}</span><span>{modeLabel} · {mode === "offline" ? "Qwen 0.5B" : "GPT-4o mini · возможна тарификация"}</span></div>
       </footer>
     </section>
 
