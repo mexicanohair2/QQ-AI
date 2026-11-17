@@ -10,3 +10,7 @@ Ruling: Use a dedicated remote feature branch as the isolated workspace — loca
 Task 1: complete (commits b00dcf4..1a91a3d, tests: GitHub Actions run 44189496771 → PASS; 1 test, typecheck PASS, production build PASS).
 
 Task 1: Ruling: Pin compatible dependencies to exact versions rather than mutable `latest` tags — repeatable dependency resolution is safer for a user-facing mobile app — cost if wrong: versions may need deliberate upgrades later.
+
+Task 2: complete (commits 1a91a3d..1641cc0, tests: GitHub Actions run 44190052628 → PASS; 3 test files, 11 tests, typecheck PASS, production build PASS).
+
+Task 2: Ruling: Keep mock-provider replies explicitly labelled as demonstration-only and avoid even a simulated network delay — users must not mistake prototype text for a live model response — cost if wrong: the first prototype will feel less like a finished AI until Qwen/online inference is integrated.
