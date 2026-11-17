@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
@@ -27,7 +27,8 @@ describe("QQ AI application", () => {
     const composer = screen.getByRole("textbox", { name: "Сообщение для QQ AI" });
     await user.type(composer, "Привет, QQ AI!");
     await user.keyboard("{Enter}");
-    expect(await screen.findByText("Привет, QQ AI!")).toBeInTheDocument();
+    const userMessage = await screen.findByRole("article", { name: "Ваше сообщение" });
+    expect(within(userMessage).getByText("Привет, QQ AI!")).toBeInTheDocument();
     expect(await screen.findByText(/я пока работаю в демонстрационном режиме/i)).toBeInTheDocument();
   });
 });
