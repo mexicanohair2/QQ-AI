@@ -1,11 +1,15 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
-import { beforeEach, describe, expect, it } from "vitest";
-import { IDBFactory } from "fake-indexeddb";
+
+vi.mock("./features/chat/storage", () => ({
+  loadConversations: vi.fn().mockResolvedValue([]),
+  saveConversations: vi.fn().mockResolvedValue(undefined),
+}));
 
 beforeEach(() => {
-  Object.defineProperty(globalThis, "indexedDB", { value: new IDBFactory(), configurable: true });
+  vi.clearAllMocks();
 });
 
 describe("QQ AI application", () => {
@@ -24,8 +28,6 @@ describe("QQ AI application", () => {
     await user.type(composer, "Привет, QQ AI!");
     await user.keyboard("{Enter}");
     expect(await screen.findByText("Привет, QQ AI!")).toBeInTheDocument();
-    await waitFor(() => {
-      expect(screen.getByText(/я пока работаю в демонстрационном режиме/i)).toBeInTheDocument();
-    });
+    expect(await screen.findByText(/я пока работаю в демонстрационном режиме/i)).toBeInTheDocument();
   });
 });
