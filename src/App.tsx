@@ -36,13 +36,13 @@ export default function App() {
   const [memories, setMemories] = useState<string[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [cloudStatus, setCloudStatus] = useState("Только на этом устройстве");
+  const [cloudLoaded, setCloudLoaded] = useState(false);
   const [threadId, setThreadId] = useState(() => {
     try { return localStorage.getItem(THREAD_KEY) || crypto.randomUUID(); }
     catch { return "qq-ai-" + Date.now(); }
   });
   const engine = useRef<any>(null);
   const bottom = useRef<HTMLDivElement>(null);
-  const lastFeedback = useRef<Record<number, boolean>>({});
 
   useEffect(() => {
     try {
@@ -66,12 +66,14 @@ export default function App() {
 
   useEffect(() => {
     if (!supabase || !session?.user) {
+      setCloudLoaded(false);
       setCloudStatus("Только на этом устройстве");
       setMemoryEnabled(false);
       setMemories([]);
       return;
     }
     let alive = true;
+    setCloudLoaded(false);
     setCloudStatus("Подключаем облако…");
     Promise.all([
       supabase.from("qq_ai_threads").select("id,messages").order("updated_at", { ascending: false }).limit(1).maybeSingle(),
@@ -91,12 +93,13 @@ export default function App() {
       }
       setCloudStatus("Облако подключено");
       if (threadResult.error || prefsResult.error) setCloudStatus("Облако подключено частично");
-    }).catch(() => setCloudStatus("Не удалось подключить облако"));
+      setCloudLoaded(true);
+    }).catch(() => { setCloudStatus("Не удалось подключить облако"); setCloudLoaded(true); });
     return () => { alive = false; };
   }, [session?.user?.id]);
 
   useEffect(() => {
-    if (!supabase || !session?.user || messages.length === 0) return;
+    if (!supabase || !session?.user || !cloudLoaded || messages.length === 0) return;
     const timeout = window.setTimeout(async () => {
       const first = messages.find(m => m.role === "user")?.content || "Новый диалог";
       const { error: saveError } = await supabase.from("qq_ai_threads").upsert({
@@ -109,7 +112,7 @@ export default function App() {
       setCloudStatus(saveError ? "Ошибка синхронизации" : "Облако синхронизировано");
     }, 900);
     return () => window.clearTimeout(timeout);
-  }, [messages, session?.user?.id, threadId]);
+  }, [messages, session?.user?.id, threadId, cloudLoaded]);
 
   async function loadOfflineModel() {
     if (busy || offlineReady) return;
