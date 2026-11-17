@@ -36,7 +36,7 @@ export default async function handler(request: Request): Promise<Response> {
         detail = parsed.error?.message || parsed.message || parsed.error || "";
         if (typeof detail !== "string") detail = JSON.stringify(detail);
       } catch {
-        detail = upstreamText.replace(/<[^>]*>/g, " ").replace(/\\s+/g, " ").trim();
+        detail = upstreamText.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
       }
       return json({
         error: `AI Gateway ответил с кодом ${upstream.status}.${detail ? " Подробности: " + detail.slice(0, 500) : " Проверь доступ проекта и выбранную модель."}`
