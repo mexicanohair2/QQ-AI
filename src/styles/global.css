@@ -1,0 +1,14 @@
+* { box-sizing: border-box; }
+html, body, #root { min-width: 320px; min-height: 100%; margin: 0; }
+body {
+  min-height: 100dvh;
+  color: var(--text);
+  background: radial-gradient(ellipse at 50% -20%, #39243a 0%, #1b121e 42%, var(--bg) 78%);
+}
+button, textarea, input { font: inherit; }
+button { color: inherit; }
+.app-root { min-height: 100dvh; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
