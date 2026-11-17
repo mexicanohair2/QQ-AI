@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import App from "./App";
+import { describe, expect, it } from "vitest";
 
 describe("QQ AI application", () => {
   it("renders the application landmark and product title", () => {
