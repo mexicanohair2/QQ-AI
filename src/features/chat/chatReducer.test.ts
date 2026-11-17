@@ -108,6 +108,17 @@ describe("chatReducer", () => {
     expect(restored.generationId).toBeNull();
   });
 
+  it("opens the most recently updated conversation after restore", () => {
+    const older = { ...conversation, id: "older", title: "Старый", updatedAt: 10 };
+    const newer = { ...conversation, id: "newer", title: "Новый", updatedAt: 20 };
+    const restored = chatReducer(initialChatState, {
+      type: "state/restore",
+      conversations: [older, newer],
+    });
+    expect(restored.conversations.map((item) => item.id)).toEqual(["newer", "older"]);
+    expect(restored.activeConversationId).toBe("newer");
+  });
+
   it("deletes a conversation and clears active generation state", () => {
     const started = chatReducer(
       chatReducer(initialChatState, { type: "conversation/create", conversation }),
