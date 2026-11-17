@@ -37,7 +37,6 @@ export default function App() {
   const [memoryDraft, setMemoryDraft] = useState("");
   const [memories, setMemories] = useState<string[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(() => {
     try { return localStorage.getItem("qq-ai-sidebar-hidden") !== "1"; }
     catch { return true; }
@@ -290,14 +289,14 @@ export default function App() {
     if (!supabase || !session?.user) { setAuthOpen(true); return; }
     const { data, error: historyError } = await supabase.from("qq_ai_threads").select("id,title,updated_at").order("updated_at", { ascending: false }).limit(30);
     if (historyError) { setError("Не удалось загрузить историю: " + historyError.message); return; }
-    setThreads(data || []); setHistoryOpen(true);
+    setThreads(data || []); setSidebarVisible(true);
   }
 
   async function openThread(id: string) {
     if (!supabase) return;
     const { data, error: threadError } = await supabase.from("qq_ai_threads").select("id,messages").eq("id", id).single();
     if (threadError) { setError("Не удалось открыть диалог: " + threadError.message); return; }
-    setThreadId(data.id); setMessages(Array.isArray(data.messages) ? data.messages as Message[] : []); setHistoryOpen(false);
+    setThreadId(data.id); setMessages(Array.isArray(data.messages) ? data.messages as Message[] : []);
   }
 
   function newChat() {
@@ -310,13 +309,22 @@ export default function App() {
   const modeLabel = useMemo(() => mode === "online" ? "Онлайн" : "Офлайн", [mode]);
 
   return <main className="shell">
-    {sidebarVisible && <aside className="rail">
-      <button className="brand-mark" aria-label="QQ AI">QQ</button>
-      <button className="rail-action active" title="Новый диалог" onClick={newChat}>＋</button>
-      <button className="rail-action" title="История диалогов" onClick={() => void showHistory()}>☷</button>
-      <button className="rail-action" title="Настройки памяти" onClick={() => setSettingsOpen(true)}>✧</button>
-      <div className="rail-spacer" />
-      <button className="avatar-button" title={session?.user.email || "Войти"} onClick={() => setAuthOpen(true)}>{session?.user.email?.[0]?.toUpperCase() || "↗"}</button>
+    {sidebarVisible && <aside className="rail history-sidebar">
+      <div className="sidebar-head">
+        <button className="brand-mark" aria-label="QQ AI">QQ</button>
+        <button className="sidebar-close" onClick={() => setSidebarVisible(false)} aria-label="Скрыть историю" title="Скрыть панель">‹</button>
+      </div>
+      <button className="sidebar-new-chat" onClick={newChat}><span>＋</span>Новый диалог</button>
+      <div className="sidebar-section-label">ИСТОРИЯ ДИАЛОГОВ</div>
+      <div className="sidebar-history-list">
+        {!session ? <div className="sidebar-empty">Войди в аккаунт, чтобы увидеть сохранённые диалоги.</div> :
+          threads.length ? threads.map(t => <button className="sidebar-thread" key={t.id} onClick={() => void openThread(t.id)}><b>{t.title || "Новый диалог"}</b><small>{new Date(t.updated_at).toLocaleDateString("ru-RU")}</small></button>) :
+          <div className="sidebar-empty">Здесь появятся твои сохранённые диалоги.</div>}
+      </div>
+      <div className="sidebar-bottom">
+        <button className="sidebar-settings" onClick={() => setSettingsOpen(true)}>✧ <span>Настройки памяти</span></button>
+        <button className="avatar-button" title={session?.user.email || "Войти"} onClick={() => setAuthOpen(true)}>{session?.user.email?.[0]?.toUpperCase() || "↗"}</button>
+      </div>
     </aside>}
 
     <section className="workspace">
@@ -376,11 +384,6 @@ export default function App() {
       <button className="modal-close" onClick={() => setAuthOpen(false)}>×</button><div className="modal-symbol">QQ</div><h2>{session ? "Аккаунт QQ AI" : "Синхронизация с облаком"}</h2>
       {session ? <><p>Вход выполнен: {session.user.email}. История и память синхронизируются с облаком.</p><button className="secondary-button" onClick={async () => { await supabase?.auth.signOut(); setAuthOpen(false); }}>Выйти</button></> :
       <><p>Войди по электронной почте, чтобы сохранять диалоги и настройки между устройствами.</p><input className="modal-input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Электронная почта" disabled={otpSent} />{otpSent ? <><input className="modal-input" inputMode="numeric" value={otpCode} onChange={e => setOtpCode(e.target.value)} placeholder="Код из письма" /><button className="primary full" onClick={() => void verifyEmailCode()}>Подтвердить код</button><button className="secondary-button full" onClick={() => { setOtpSent(false); setOtpCode(""); setAuthMessage(""); }}>Изменить почту</button></> : <button className="primary full" onClick={() => void signIn()}>Получить код для входа</button>}<small>{authMessage}</small></>}
-    </section></div>}
-
-    {historyOpen && <div className="modal-backdrop" onClick={() => setHistoryOpen(false)}><section className="modal history-modal" onClick={e => e.stopPropagation()}>
-      <button className="modal-close" onClick={() => setHistoryOpen(false)}>×</button><div className="eyebrow">ОБЛАЧНОЕ ХРАНИЛИЩЕ</div><h2>История диалогов</h2>
-      {threads.length ? <ul className="history-list">{threads.map(t => <li key={t.id}><button onClick={() => void openThread(t.id)}><b>{t.title || "Новый диалог"}</b><small>{new Date(t.updated_at).toLocaleString("ru-RU")}</small></button></li>)}</ul> : <p>В облаке пока нет сохранённых диалогов.</p>}
     </section></div>}
 
     {settingsOpen && <div className="modal-backdrop" onClick={() => setSettingsOpen(false)}><section className="modal settings-modal" onClick={e => e.stopPropagation()}>
