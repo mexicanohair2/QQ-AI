@@ -738,3 +738,18 @@ test("local GPU runtime selection keeps at most one heavyweight model active", a
   assert.match(app, /await prepareLocalRuntime\("vision"\)/);
   assert.match(app, /await prepareLocalRuntime\("speech"\)/);
 });
+
+test("online mode never silently falls back to the offline Qwen model", async () => {
+  const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const start = app.indexOf("async function send()");
+  const end = app.indexOf("async function signIn()", start);
+  assert.ok(start >= 0 && end > start, "send handler should exist");
+  const handler = app.slice(start, end);
+  const onlineStart = handler.indexOf('else if (mode === "online")');
+  const offlineStart = handler.indexOf('} else await sendOffline(next);', onlineStart);
+  assert.ok(onlineStart >= 0 && offlineStart > onlineStart, "online and offline routes should be distinct");
+  const onlineBranch = handler.slice(onlineStart, offlineStart);
+  assert.doesNotMatch(onlineBranch, /sendOffline|setMode\("offline"\)/);
+  assert.match(handler, /Онлайн-режим не переключается автоматически/);
+  assert.match(app, /mode === "online" && <button className="secondary-button"/);
+});

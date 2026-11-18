@@ -1252,25 +1252,17 @@ export default function App() {
           return;
         }
         if (mode === "online" && onlineModelReady === false) {
-          if (offlineReady) {
-            setMode("offline");
-            setStatus("Облачная модель не подключена. Переключаюсь на локальную…");
-            await sendOffline(next);
-          } else if (shouldSearchWeb(content)) {
+          if (shouldSearchWeb(content)) {
             const searchAnswer = await sendSearchFallback(content);
             setMessages([...next, { role: "assistant", content: searchAnswer }]);
           } else {
-            throw new Error("Облачная модель QQ AI ещё не подключена. Переключись на «Офлайн» и загрузи локальную модель, чтобы получить ответ.");
+            throw new Error("Облачная модель QQ AI ещё не подключена. Онлайн-режим не переключается автоматически. Если хочешь использовать локальную модель, вручную выбери «Офлайн».");
           }
         } else if (mode === "online") {
           try {
             await sendOnline(next);
           } catch (onlineError) {
-            if (offlineReady) {
-              setMode("offline");
-              setStatus("Онлайн-модель недоступна. Переключаюсь на локальную…");
-              await sendOffline(next);
-            } else if (shouldSearchWeb(content)) {
+            if (shouldSearchWeb(content)) {
               const searchAnswer = await sendSearchFallback(content);
               setMessages([...next, { role: "assistant", content: searchAnswer }]);
             } else throw onlineError;
@@ -1449,7 +1441,7 @@ export default function App() {
         </div>}
       </div>
 
-      {error && <div className="error-banner">{error}{mode === "online" && onlineModelReady === false && error.includes("ещё не размещена") && <button className="secondary-button" onClick={() => { setMode("offline"); setError(""); setStatus(offlineReady ? "Офлайн-модель готова" : "Сначала подготовь офлайн-модель"); }}>Перейти в офлайн-режим</button>}</div>}
+      {error && <div className="error-banner">{error}{mode === "online" && <button className="secondary-button" onClick={() => { setMode("offline"); setError(""); setStatus(offlineReady ? "Офлайн-модель готова" : "Сначала подготовь офлайн-модель"); }}>Открыть офлайн-режим</button>}</div>}
       {mode === "offline" && !offlineReady && messages.length > 0 && <div className="offline-inline"><span>Офлайн-модель не загружена</span><button onClick={loadOfflineModel} disabled={busy}>Подготовить</button>{busy && <span>{progress}%</span>}</div>}
       {!localVisionReady && (mode === "offline" || visionReady !== true) && <div className="offline-inline local-vision-inline">
         <span>{localVisionLoading ? localVisionStatus || "Загружаем локальную модель зрения…" : "Локальный анализ изображений — без отправки фото на сервер."}</span>
