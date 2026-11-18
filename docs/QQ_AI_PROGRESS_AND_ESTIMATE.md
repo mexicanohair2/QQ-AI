@@ -1,6 +1,6 @@
 # QQ AI — progress and realistic delivery estimate
 
-Last verified: 2026-11-18 (application and verification commit `ceb8f3cab5b23dae0efc9bc9c370b78c7b5acdf7`). This document describes the feature-branch preview, not a production release.
+Last verified: 2026-11-18 (latest preview build commit `688747364cf6e2e6019a1a4ef26fae4a1bca0524`). This document describes the feature-branch preview, not a production release.
 
 ## Verified now
 
@@ -139,3 +139,36 @@ A useful first online release is therefore measured in **weeks**, not hours. A s
 - Qwen ID сверён с официальным каталогом WebLLM; оценка VRAM в каталоге — около 945 МБ. Реальная загрузка и генерация на Honor 400 не тестировались.
 - Онлайн-генерация, реальный vision и аудиоанализ видео по-прежнему не работают до размещения подходящих весов и inference endpoint.
 - PR #1 остаётся draft; merge, production deploy, изменения QQCross и APK не выполнялись.
+
+
+## Обновление 18 ноября 2026 — защита upstream-ответов и потоков
+
+### Изменения в feature-ветке
+
+- `api/chat.ts`: при ошибке upstream-модели тело ответа отменяется и внутренние сообщения провайдера не пересылаются клиенту. Добавлен тест на отсутствие утечки диагностик.
+- `api/vision.ts`: ответ vision-провайдера читается с лимитом 256 КБ; ошибки upstream очищены; некорректный JSON, пустые и слишком длинные ответы обрабатываются безопасно. Добавлен тест на эти условия.
+- `api/chat.ts` и `api/search.ts`: при неуспешном ответе поискового провайдера upstream-поток отменяется; добавлен регрессионный тест.
+- Все изменения находятся в `feature/multimodal-search-voice`; PR #1 не объединён с основной веткой.
+
+### Проверка preview
+
+- Точный commit preview: `688747364cf6e2e6019a1a4ef26fae4a1bca0524`.
+- Vercel deployment `dpl_8amLjo1FpeCeomcV682HJghAaC4b` — READY.
+- Vercel build выполнил `tsc -b && vite build`; TypeScript и production build завершились успешно.
+- Vercel install log сообщил о четырёх high-severity npm audit findings. В этом запуске подробный JSON-отчёт не получен, поэтому затронутые пакеты и применимость к runtime не подтверждены. Не запускать слепой `npm audit fix --force`; требуется отдельный точный аудит.
+- Vite сообщил о крупном WebLLM runtime chunk около 6,16 МБ (gzip около 2,18 МБ). Это отдельный тяжёлый chunk локального движка; фактическую загрузку только при выборе Qwen следует подтвердить браузерным сетевым тестом.
+- Отдельные unit-тесты в этом preview build не запускались. Тесты добавлены в репозиторий, но их прохождение на этом commit не подтверждено.
+- Прямая проверка страницы и API через браузерный инструмент в этой сессии не удалась; статус READY подтверждает успешную сборку и публикацию preview, но не полный пользовательский сценарий.
+
+### Исправление устаревшей заметки о lockfile
+
+В предыдущем разделе указано, что `package-lock.json` отсутствует. Это устарело: в текущей ветке файл существует (lockfileVersion 3). При этом текущий Vercel build log показывает команду `npm install`, а не `npm ci`; воспроизводимая установка через lockfile ещё не подтверждена.
+
+### Оставшиеся release blockers
+
+- QQ Online всё ещё не имеет настроенных `QQ_AI_API_URL` и `QQ_AI_MODEL`; live generation недоступна.
+- Vision endpoint не имеет настроенной vision-модели; изображения и видео пока не анализируются моделью.
+- Полный npm audit требует получения подробного отчёта и устранения/обоснования четырёх high findings.
+- Нужно запустить полный набор тестов на точном commit, затем проверить preview: root, capabilities, реальный POST-поиск, текстовый маршрут, Qwen load/generation, upload и отмену медиа.
+- Не выполнено физическое тестирование на Honor 400.
+- PR остаётся draft; production deploy и интеграция в QQCross не выполнялись.
