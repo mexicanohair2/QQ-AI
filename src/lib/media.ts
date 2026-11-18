@@ -159,8 +159,9 @@ export async function sampleVideoFrames(file: File): Promise<PreparedVideoFrame[
   video.src = objectUrl;
 
   try {
+    const metadataReady = waitForMediaEvent(video, "loadedmetadata", 12000);
     video.load();
-    await waitForMediaEvent(video, "loadedmetadata", 12000);
+    await metadataReady;
     const duration = video.duration;
     if (!Number.isFinite(duration) || duration <= 0) {
       throw new Error("Не удалось определить длительность видео.");
