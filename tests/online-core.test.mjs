@@ -311,7 +311,7 @@ test("offline-first welcome screen offers one clear action to prepare the local 
   const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
   assert.match(app, /Загрузить и запустить ИИ/);
   assert.match(app, /Локальная модель ещё не загружена/);
-  assert.match(app, /для актуальных тем может искать источники в интернете/);
+  assert.match(app, /для актуальных тем искать источники в интернете/);
 });
 
 test("offline chat does not append a user message before the local model is ready", async () => {
