@@ -1,3 +1,4 @@
+import { readResponseTextLimited } from "../src/lib/bounded-response";
 import {
   buildSearchContext,
   parseDuckDuckGoResults,
@@ -53,8 +54,7 @@ async function runSearch(query: string, signal: AbortSignal) {
     },
   );
   if (!response.ok) throw new Error("Поиск временно недоступен.");
-  const html = await response.text();
-  if (html.length > 2_500_000) throw new Error("Поисковая выдача слишком большая.");
+  const html = await readResponseTextLimited(response, 2_500_000);
   return parseDuckDuckGoResults(html);
 }
 
