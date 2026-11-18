@@ -53,22 +53,29 @@ export function buildMemoryInstruction(value: unknown): string {
   ].join("\n");
 }
 
-export function readStoredMemories(storage?: MemoryStorage | null): string[] {
+function scopedMemoryKey(base: string, scopeId: string): string {
+  const scope = scopeId.trim().slice(0, 128);
+  if (!scope || scope === "anonymous") return base;
+  const safeScope = scope.replace(/[^a-zA-Z0-9_-]/g, "_");
+  return base + ":" + safeScope;
+}
+
+export function readStoredMemories(storage?: MemoryStorage | null, scopeId = "anonymous"): string[] {
   try {
     const target = storage ?? (typeof localStorage !== "undefined" ? localStorage : null);
     if (!target) return [];
-    const raw = target.getItem(MEMORY_STORAGE_KEY);
+    const raw = target.getItem(scopedMemoryKey(MEMORY_STORAGE_KEY, scopeId));
     return raw ? normalizeMemoryEntries(JSON.parse(raw)) : [];
   } catch {
     return [];
   }
 }
 
-export function persistStoredMemories(value: unknown, storage?: MemoryStorage | null): boolean {
+export function persistStoredMemories(value: unknown, storage?: MemoryStorage | null, scopeId = "anonymous"): boolean {
   try {
     const target = storage ?? (typeof localStorage !== "undefined" ? localStorage : null);
     if (!target) return false;
-    target.setItem(MEMORY_STORAGE_KEY, JSON.stringify(normalizeMemoryEntries(value)));
+    target.setItem(scopedMemoryKey(MEMORY_STORAGE_KEY, scopeId), JSON.stringify(normalizeMemoryEntries(value)));
     return true;
   } catch {
     return false;
@@ -77,10 +84,10 @@ export function persistStoredMemories(value: unknown, storage?: MemoryStorage | 
 
 export type StoredMemoryPreference = { enabled: boolean; updatedAt: number };
 
-export function readStoredMemoryPreference(storage?: MemoryStorage | null): StoredMemoryPreference | null {
+export function readStoredMemoryPreference(storage?: MemoryStorage | null, scopeId = "anonymous"): StoredMemoryPreference | null {
   try {
     const target = storage ?? (typeof localStorage !== "undefined" ? localStorage : null);
-    const raw = target?.getItem(MEMORY_ENABLED_STORAGE_KEY);
+    const raw = target?.getItem(scopedMemoryKey(MEMORY_ENABLED_STORAGE_KEY, scopeId));
     if (!raw) return null;
     if (raw === "true" || raw === "false") {
       return { enabled: raw === "true", updatedAt: 0 };
@@ -110,19 +117,20 @@ export function resolveMemoryEnabled(
   return cloudEnabled;
 }
 
-export function readStoredMemoryEnabled(storage?: MemoryStorage | null): boolean | null {
-  return readStoredMemoryPreference(storage)?.enabled ?? null;
+export function readStoredMemoryEnabled(storage?: MemoryStorage | null, scopeId = "anonymous"): boolean | null {
+  return readStoredMemoryPreference(storage, scopeId)?.enabled ?? null;
 }
 
 export function persistStoredMemoryEnabled(
   enabled: boolean,
   storage?: MemoryStorage | null,
   updatedAt = Date.now(),
+  scopeId = "anonymous",
 ): boolean {
   try {
     const target = storage ?? (typeof localStorage !== "undefined" ? localStorage : null);
     if (!target || !Number.isFinite(updatedAt) || updatedAt < 0) return false;
-    target.setItem(MEMORY_ENABLED_STORAGE_KEY, JSON.stringify({ enabled, updatedAt }));
+    target.setItem(scopedMemoryKey(MEMORY_ENABLED_STORAGE_KEY, scopeId), JSON.stringify({ enabled, updatedAt }));
     return true;
   } catch {
     return false;
