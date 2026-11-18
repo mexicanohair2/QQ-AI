@@ -111,16 +111,7 @@ export function resolveMemoryEnabled(
 }
 
 export function readStoredMemoryEnabled(storage?: MemoryStorage | null): boolean | null {
-  try {
-    const target = storage ?? (typeof localStorage !== "undefined" ? localStorage : null);
-    if (!target) return null;
-    const raw = target.getItem(MEMORY_ENABLED_STORAGE_KEY);
-    if (raw === "true") return true;
-    if (raw === "false") return false;
-    return null;
-  } catch {
-    return null;
-  }
+  return readStoredMemoryPreference(storage)?.enabled ?? null;
 }
 
 export function persistStoredMemoryEnabled(
