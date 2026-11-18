@@ -310,6 +310,7 @@ test("image and video attachments use a configured cloud or explicitly loaded lo
   assert.match(app, /fetch\("\/api\/vision"/);
   assert.match(app, /Фото и выбранные видеокадры останутся на этом устройстве/);
   assert.match(worker, /device: "webgpu"/);
+  assert.match(worker, /dtype: "q8"/);
   assert.match(worker, /HuggingFaceTB\/SmolVLM-256M-Instruct/);
   assert.equal(routing.selectVisionBackend("online", true, true), "cloud");
   assert.equal(routing.selectVisionBackend("online", false, true), "local");
