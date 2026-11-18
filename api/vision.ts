@@ -1,3 +1,5 @@
+import { readRequestTextLimited } from "../src/lib/bounded-response";
+
 export const config = { runtime: "edge" };
 
 type MediaItem = { mimeType: string; dataBase64: string; timestampMs?: number };
@@ -59,8 +61,9 @@ export default async function handler(request: Request): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 55_000);
   try {
-    const raw = await request.text();
-    if (raw.length > 4_300_000) return json({ error: "Медиа-запрос слишком большой. Уменьши размер фото или число кадров." }, 413);
+    let raw: string;
+    try { raw = await readRequestTextLimited(request, 4_300_000); }
+    catch { return json({ error: "Медиа-запрос слишком большой. Уменьши размер фото или число кадров." }, 413); }
 
     let body: { task?: "image" | "video_frames"; question?: string; items?: MediaItem[] };
     try { body = JSON.parse(raw) as typeof body; }
