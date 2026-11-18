@@ -62,3 +62,16 @@ No hosting vendor is selected in this roadmap. Do not create accounts, accept te
 ## Current status
 
 As of this document, QQ AI has a provider-neutral online gateway, search-result retrieval, media UI/preparation, and a vision gateway contract. No QQ model weights have been trained, no QQ inference GPU has been provisioned, and live online generation/vision are not yet configured. The benchmark harness prepares evaluation; it does not itself prove model quality.
+
+## Candidate to evaluate first (not yet selected)
+
+A concrete first candidate is **Mistral AI Ministral 3 8B Instruct**:
+
+- Official model card: https://huggingface.co/mistralai/Ministral-3-8B-Instruct-2512
+- Official Mistral model documentation: https://docs.mistral.ai/models/ministral-8b-latest
+- License: Apache 2.0, as stated by Mistral and the model card.
+- It is an 8B-class instruction model with native image understanding and a documented 256k context window.
+- Mistral's language documentation explicitly includes Russian among supported languages: https://docs.mistral.ai/resources/languages
+- Mistral's vLLM instructions recommend an H200-class GPU for the documented full-precision/FP8 serving path. The 8B checkpoint file shown on Hugging Face is about 17.8 GB before runtime memory, KV cache, and vision overhead.
+
+This is a **candidate for controlled evaluation and QQ fine-tuning**, not a final selection and not a currently deployed model. It is substantially larger than the local 0.5B Qwen baseline, but parameter count alone does not prove better Russian reasoning. Run the same benchmark before claiming superiority. Quantized hosting on smaller hardware must be measured rather than assumed.
