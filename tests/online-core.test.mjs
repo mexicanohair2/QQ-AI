@@ -59,3 +59,10 @@ test("online UI does not silently switch to offline Qwen", async () => {
   assert.match(app, /sendOffline\(next\)/);
   assert.match(app, /onlineModelReady/);
 });
+
+test("chat gateway rejects cross-origin browser requests", async () => {
+  const source = await readFile(new URL("../api/chat.ts", import.meta.url), "utf8");
+  assert.match(source, /function rejectCrossOrigin/);
+  assert.match(source, /const originError = rejectCrossOrigin\(request\)/);
+  assert.match(source, /Недопустимый источник запроса/);
+});
