@@ -7,7 +7,7 @@ import "katex/dist/katex.min.css";
 import { createClient, type Session } from "@supabase/supabase-js";
 import { calculateMathQuestion } from "./lib/math";
 import { dataUrlToBase64, prepareImage, sampleVideoFrames } from "./lib/media";
-import { shouldSearchWeb } from "./lib/qq-ai-core";
+import { buildSearchContext, shouldSearchWeb, type QQSearchSource } from "./lib/qq-ai-core";
 import { readOpenAIChatStream } from "./lib/openai-stream";
 import { readChatMessages, type ChatMessage } from "./lib/chat-storage";
 
@@ -55,7 +55,7 @@ function VoiceIcon() {
 
 export default function App() {
   const [messages, setMessages] = useState<Message[]>(readChatMessages);
-  const [mode, setMode] = useState<Mode>("online");
+  const [mode, setMode] = useState<Mode>("offline");
   const [status, setStatus] = useState("Проверяем доступность QQ AI Online…");
   const [progress, setProgress] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -316,17 +316,62 @@ export default function App() {
   }
 
   async function sendOffline(history: Message[]) {
-    if (!engine.current || !offlineReady) throw new Error("Офлайн-модель ещё не загружена. Подготовь её заранее при подключении к интернету.");
+    if (!engine.current || !offlineReady) throw new Error("Локальная модель ещё не загружена. Нажми «Загрузить и запустить ИИ» на стартовом экране.");
+    const systemMessages: ChatMessage[] = [{
+      role: "system",
+      content: SYSTEM + (memoryEnabled && memories.length ? "\nУчитывай предпочтения пользователя: " + memories.join("; ") : ""),
+    }];
+    const lastUserMessage = [...history].reverse().find(message => message.role === "user")?.content || "";
+
+    if (shouldSearchWeb(lastUserMessage)) {
+      setStatus("Ищу актуальные источники перед ответом…");
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 12_000);
+      try {
+        const response = await fetch("/api/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: lastUserMessage }),
+          signal: controller.signal,
+        });
+        const result = await response.json().catch(() => ({})) as { sources?: unknown; error?: string };
+        const sources = Array.isArray(result.sources) ? result.sources.filter((source): source is QQSearchSource =>
+          Boolean(source) &&
+          typeof source === "object" &&
+          typeof (source as QQSearchSource).title === "string" &&
+          typeof (source as QQSearchSource).url === "string" &&
+          typeof (source as QQSearchSource).domain === "string" &&
+          typeof (source as QQSearchSource).excerpt === "string" &&
+          typeof (source as QQSearchSource).retrievedAt === "string"
+        ).slice(0, 8) : [];
+        if (!response.ok || sources.length === 0) {
+          systemMessages.push({
+            role: "system",
+            content: "Пользователь запросил актуальную информацию, но веб-поиск не вернул проверяемых источников. Не выдавай сведения за актуальные и прямо сообщи об ограничении.",
+          });
+        } else {
+          systemMessages.push({ role: "system", content: buildSearchContext(sources) });
+        }
+      } catch {
+        systemMessages.push({
+          role: "system",
+          content: "Пользователь запросил актуальную информацию, но веб-поиск не сработал. Не выдумывай источники и предупреди, что не смог проверить актуальность.",
+        });
+      } finally {
+        window.clearTimeout(timeout);
+      }
+    }
+
     const stream = await engine.current.chat.completions.create({
-      messages: [{ role: "system", content: SYSTEM + (memoryEnabled && memories.length ? "\nУчитывай предпочтения пользователя: " + memories.join("; ") : "") }, ...history],
-      temperature: 0.7, max_tokens: 700, stream: true,
+      messages: [...systemMessages, ...history],
+      temperature: 0.7, max_tokens: 900, stream: true,
     });
     let answer = "";
     for await (const chunk of stream) {
       answer += chunk.choices?.[0]?.delta?.content || "";
       setMessages([...history, { role: "assistant", content: answer }]);
     }
-    if (!answer.trim()) throw new Error("Офлайн-модель вернула пустой ответ.");
+    if (!answer.trim()) throw new Error("Локальная модель вернула пустой ответ.");
     return answer;
   }
 
@@ -522,7 +567,7 @@ export default function App() {
     const next = [...messages, { role: "user" as const, content, ...(attachmentInfo.length ? { attachments: attachmentInfo } : {}) }];
     setMessages([...next, { role: "assistant", content: "" }]);
     setDraft(""); setBusy(true); setError("");
-    setStatus(selected.length ? "QQ AI подготавливает вложения…" : mode === "online" ? "QQ AI подключается к облачной модели…" : "QQ AI думает локально…");
+    setStatus(selected.length ? "QQ AI подготавливает вложения…" : mode === "online" ? "QQ AI подключается к облачной модели…" : "Локальная модель формирует ответ…");
     try {
       if (selected.length > 0) {
         const answer = await sendVision(next, selected);
@@ -671,7 +716,7 @@ export default function App() {
           <div className="welcome-orb"><span>QQ</span><i /></div>
           <div className="eyebrow">ЛИЧНЫЙ ИИ-ПОМОЩНИК</div>
           <h1>О чём <em>подумаем</em> сегодня?</h1>
-          <p className="welcome-copy">Задавай вопросы, исследуй идеи и создавай новое. Переключайся между облачным интеллектом и локальной моделью.</p>
+          <p className="welcome-copy">Задавай вопросы, исследуй идеи и создавай новое. Локальная модель отвечает прямо в браузере, а для актуальных тем может искать источники в интернете.</p>
           {mode === "online" && onlineModelReady === false && <div className="offline-card">
             <div><b>Онлайн-модель пока не подключена</b><small>Сейчас доступны интернет-поиск и локальная модель после загрузки. Можно перейти в офлайн-режим.</small></div>
             <button className="primary" onClick={() => { setMode("offline"); setStatus(offlineReady ? "Офлайн-модель готова" : "Сначала подготовь офлайн-модель"); }}>Открыть локальный режим</button>
@@ -686,7 +731,7 @@ export default function App() {
             <button className="primary" onClick={loadOfflineModel} disabled={busy}>{busy ? "Загрузка…" : "Загрузить модель"}</button>
             {busy && <div className="progress"><span style={{ width: progress + "%" }} /></div>}
           </div>}
-          <div className="welcome-foot"><span className="status-pulse" />{mode === "online" ? capabilitiesUnavailable ? "Не удалось проверить статус моделей" : onlineModelReady === true ? "QQ AI Online · собственная модель подключена" : onlineModelReady === false ? "QQ AI Online · модель ещё не размещена; поиск доступен отдельно" : "Проверяем онлайн-модель…" : offlineReady ? "Локальная модель готова" : "Офлайн-модель ещё не загружена"}</div>
+          <div className="welcome-foot"><span className="status-pulse" />{mode === "online" ? capabilitiesUnavailable ? "Не удалось проверить статус моделей" : onlineModelReady === true ? "QQ AI Online · собственная модель подключена" : onlineModelReady === false ? "QQ AI Online · модель ещё не размещена; поиск доступен отдельно" : "Проверяем онлайн-модель…" : offlineReady ? "Локальная модель готова" : "Локальная модель ещё не загружена"}</div>
         </div> : <div className="conversation">
           {messages.map((m, i) => <article className={`message ${m.role}`} key={i}>
             <div className="message-avatar">{m.role === "assistant" ? <span>QQ</span> : "Вы"}</div>
