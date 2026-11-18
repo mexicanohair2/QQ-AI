@@ -249,3 +249,15 @@ body{
  .composer-meta-actions{align-items:flex-end;flex-direction:column-reverse;gap:4px}
  .notification-toggle{font-size:8px}
 }
+
+
+.voice-button{
+  width:39px;height:39px;flex:none;display:grid;place-items:center;
+  border:1px solid #c18aa54d;border-radius:13px;
+  background:linear-gradient(140deg,#4b2b42,#34233f);
+  color:#e6c1d5;font-size:16px;
+  transition:transform .2s,border-color .2s,background .2s;
+}
+.voice-button:hover:not(:disabled){transform:translateY(-2px);border-color:#d4a0c5a8;background:linear-gradient(140deg,#693b57,#4a345e)}
+.voice-button.listening{color:#fff0f5;background:linear-gradient(140deg,#a85d79,#79518c);border-color:#e5a9c8;box-shadow:0 0 0 3px #c77fa52b,0 0 18px #b65f8a55}
+.voice-button:disabled{opacity:.4}
