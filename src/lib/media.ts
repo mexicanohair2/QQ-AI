@@ -78,11 +78,15 @@ export async function prepareImage(file: File): Promise<PreparedImage> {
     const canvas = document.createElement("canvas");
     drawScaled(canvas, image, image.naturalWidth, image.naturalHeight, 1280);
     let blob = await canvasToJpeg(canvas, 0.78);
-    if (blob.size > 1_450_000) {
+    if (blob.size > 850_000) {
       drawScaled(canvas, image, image.naturalWidth, image.naturalHeight, 1024);
-      blob = await canvasToJpeg(canvas, 0.68);
+      blob = await canvasToJpeg(canvas, 0.65);
     }
-    if (blob.size > 1_450_000) {
+    if (blob.size > 850_000) {
+      drawScaled(canvas, image, image.naturalWidth, image.naturalHeight, 768);
+      blob = await canvasToJpeg(canvas, 0.55);
+    }
+    if (blob.size > 850_000) {
       throw new Error("Изображение не удалось уменьшить до безопасного размера.");
     }
     return { mimeType: "image/jpeg", dataUrl: await fileToDataUrl(blob), sizeBytes: blob.size };
