@@ -28,6 +28,7 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Report dependency vulnerabilities (non-blocking)
         run: |
+          npm ls vite @vitejs/plugin-react katex remark-math rehype-katex --all || true
           npm audit --json > /tmp/qq-ai-npm-audit.json || true
           node --input-type=module -e '
             import fs from "node:fs";
