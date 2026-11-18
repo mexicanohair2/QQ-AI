@@ -161,3 +161,41 @@ test("capability-check failure remains unknown instead of falsely claiming no mo
   assert.match(app, /setOnlineModelReady\(null\); setVisionReady\(null\); setCapabilitiesUnavailable\(true\)/);
   assert.match(app, /Не удалось проверить статус моделей/);
 });
+
+
+test("bounded response reader enforces the byte limit from headers and streamed chunks", async () => {
+  const { readResponseTextLimited } = await import("../src/lib/bounded-response.ts");
+  const declaredTooLarge = new Response("too large", { headers: { "content-length": "100" } });
+  await assert.rejects(() => readResponseTextLimited(declaredTooLarge, 20), /превышает допустимый размер/);
+
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode("123456"));
+      controller.enqueue(new TextEncoder().encode("789012"));
+      controller.close();
+    },
+  });
+  await assert.rejects(() => readResponseTextLimited(new Response(stream), 10), /превышает допустимый размер/);
+});
+
+test("bounded response reader preserves UTF-8 characters split between chunks", async () => {
+  const { readResponseTextLimited } = await import("../src/lib/bounded-response.ts");
+  const bytes = new TextEncoder().encode("Привет");
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(bytes.slice(0, 3));
+      controller.enqueue(bytes.slice(3));
+      controller.close();
+    },
+  });
+  assert.equal(await readResponseTextLimited(new Response(stream), 32), "Привет");
+});
+
+test("search endpoints consume bounded response bodies instead of unbounded response.text", async () => {
+  const chat = await readFile(new URL("../api/chat.ts", import.meta.url), "utf8");
+  const search = await readFile(new URL("../api/search.ts", import.meta.url), "utf8");
+  assert.match(chat, /readResponseTextLimited\(response, 2_500_000\)/);
+  assert.match(search, /readResponseTextLimited\(response, 2_500_000\)/);
+  assert.doesNotMatch(chat, /const html = await response\.text\(\)/);
+  assert.doesNotMatch(search, /const html = await response\.text\(\)/);
+});
