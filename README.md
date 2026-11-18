@@ -87,3 +87,11 @@ QQ AI — независимый русскоязычный ИИ-помощни�
 - Соблюдать возрастные условия провайдеров; не обходить проверки возраста.
 - Не логировать ключи, токены, сырые медиа и полную приватную переписку.
 - Любой текст из интернета, файлов, OCR и базы знаний считать недоверенными данными, а не инструкциями для модели.
+
+## QQ AI model development
+
+- [QQ AI model ownership and training roadmap](docs/QQ_AI_MODEL_TRAINING_ROADMAP.md) describes the route toward a QQ-maintained fine-tuned checkpoint and self-hosted inference, without claiming that a foundation model has already been trained.
+- [Russian benchmark dataset](evals/qq-ai-benchmark.ru.json) contains reasoning, math, web, vision, video, safety, and knowledge tasks with evaluation rubrics.
+- Run a text-only benchmark against a configured OpenAI-compatible QQ inference endpoint with `QQ_AI_API_URL`, `QQ_AI_MODEL`, and optionally `QQ_AI_API_KEY`:
+  `node scripts/run-qq-ai-benchmark.mjs`
+- Media-only benchmark cases are intentionally excluded by the runner until a real vision/video model endpoint is configured. The benchmark runner records outputs and latency; it does not assign quality scores automatically.
