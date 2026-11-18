@@ -39,10 +39,11 @@ test("parses, sanitizes and deduplicates real search result cards", () => {
     '<div class="result__snippet">Официальный пример.</div></div>',
   ].join("");
   const results = parseDuckDuckGoResults(html, "2026-11-18T00:00:00.000Z");
-  assert.equal(results.length, 2);
+  assert.equal(results.length, 3);
   assert.equal(results[0].title, "Первая & важная страница");
   assert.equal(results[0].excerpt, "Фрагмент первого результата.");
-  assert.equal(results[1].domain, "docs.example.com");
+  assert.equal(results[1].domain, "example.net");
+  assert.equal(results[2].domain, "docs.example.com");
   assert.equal(results[0].retrievedAt, "2026-11-18T00:00:00.000Z");
 });
 
