@@ -511,3 +511,22 @@ test("vision route rejects a cross-origin request even when Host is absent", asy
   assert.equal(response.status, 403);
   assert.deepEqual(await response.json(), { error: "Недопустимый источник запроса." });
 });
+
+test("search route rejects a non-web origin even when its host matches", async () => {
+  const { default: searchHandler } = await import("../api/search.ts");
+  const originalFetch = globalThis.fetch;
+  let fetchCalled = false;
+  globalThis.fetch = async () => { fetchCalled = true; throw new Error("should not be called"); };
+  try {
+    const request = new Request("https://qq-ai.test/api/search", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "javascript://qq-ai.test" },
+      body: JSON.stringify({ query: "blocked" }),
+    });
+    const response = await searchHandler(request);
+    assert.equal(response.status, 403);
+    assert.equal(fetchCalled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
