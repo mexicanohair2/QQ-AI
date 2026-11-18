@@ -2,6 +2,8 @@ import { readRequestTextLimited, readResponseTextLimited } from "../src/lib/boun
 import {
   buildSearchContext,
   parseDuckDuckGoResults,
+  parseBingResults,
+  mergeSearchResults,
   shouldSearchWeb,
 } from "../src/lib/qq-ai-core";
 
@@ -43,22 +45,55 @@ function validMessages(value: unknown): value is ChatMessage[] {
 }
 
 async function runSearch(query: string, signal: AbortSignal) {
-  const response = await fetch(
-    "https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query.slice(0, 300)),
+  const encodedQuery = encodeURIComponent(query.slice(0, 300));
+  const providers = [
     {
-      headers: {
-        "Accept": "text/html",
-        "User-Agent": "Mozilla/5.0 (compatible; QQAI/1.0; +https://github.com/mexicanohair2/QQ-AI)",
-      },
-      signal,
+      url: "https://html.duckduckgo.com/html/?q=" + encodedQuery,
+      parse: parseDuckDuckGoResults,
     },
-  );
-  if (!response.ok) {
-    try { await response.body?.cancel(); } catch { /* upstream may already be closed */ }
-    throw new Error("Поиск временно недоступен.");
-  }
-  const html = await readResponseTextLimited(response, 2_500_000);
-  return parseDuckDuckGoResults(html);
+    {
+      url: "https://www.bing.com/search?q=" + encodedQuery + "&count=10&setlang=ru&cc=NL",
+      parse: parseBingResults,
+    },
+  ];
+  const retrievedAt = new Date().toISOString();
+
+  const groups = await Promise.all(providers.map(async provider => {
+    const providerController = new AbortController();
+    const abortFromParent = () => providerController.abort();
+    if (signal.aborted) providerController.abort();
+    else signal.addEventListener("abort", abortFromParent, { once: true });
+    const timeout = setTimeout(() => providerController.abort(), 4_500);
+
+    try {
+      const response = await fetch(provider.url, {
+        headers: {
+          "Accept": "text/html,application/xhtml+xml",
+          "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.8",
+          "User-Agent": "Mozilla/5.0 (compatible; QQAI/1.0; +https://github.com/mexicanohair2/QQ-AI)",
+        },
+        signal: providerController.signal,
+      });
+      if (!response.ok) {
+        try { await response.body?.cancel(); } catch { /* upstream may already be closed */ }
+        return [];
+      }
+
+      try {
+        const html = await readResponseTextLimited(response, 2_500_000);
+        return provider.parse(html, retrievedAt);
+      } catch {
+        return [];
+      }
+    } catch {
+      return [];
+    } finally {
+      clearTimeout(timeout);
+      signal.removeEventListener("abort", abortFromParent);
+    }
+  }));
+
+  return mergeSearchResults(groups, 8);
 }
 
 function rejectCrossOrigin(request: Request): Response | null {
