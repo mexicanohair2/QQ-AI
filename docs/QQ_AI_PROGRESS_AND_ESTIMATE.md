@@ -1,6 +1,6 @@
 # QQ AI — progress and realistic delivery estimate
 
-Last verified: 2026-11-18 (feature-branch code commit `acc750110a738aefe6e9c4212f41c84b3176f8f4`; GitHub Actions run `44326427294` SUCCESS; Vercel preview `dpl_BecDsdZypcKpgNdcrXvyUBopNPjm` READY). This document describes the feature-branch preview, not a production release.
+Last verified: 2026-11-18 (feature-branch code commit `cdf48428104e0005359e7dd912786c2ec48aaab5`; GitHub Actions run `44329282854` SUCCESS). The currently deployed preview must be rebuilt from this newer commit before its status can be considered current. This document describes the feature-branch preview, not a production release.
 
 ## Verified now
 
@@ -26,7 +26,7 @@ Last verified: 2026-11-18 (feature-branch code commit `acc750110a738aefe6e9c4212
 | QQ Search | DuckDuckGo + Bing queried concurrently; deduplicated, sanitized results and source context; route tests use mocked provider responses | Live POST on deployed preview, full-page extraction and source corroboration |
 | Photos | Local WebGPU Vision worker is integrated; cloud Vision route is still unconfigured | Test first download/inference on Honor 400; validate Russian OCR, tables, formulas, charts and image QA |
 | Video | Local mode samples up to four evenly distributed timestamped frames and analyzes them in the browser; audio is not uploaded | Device test, quality checks across clips, and separate audio transcription/synchronized audio-video analysis |
-| Voice | Browser speech-to-text prototype | Device/browser compatibility tests; separate audio conversation/transcription model |
+| Voice | Browser SpeechRecognition fallback plus explicit local Whisper Tiny WebGPU worker; ≤20-second microphone recording is converted to 16 kHz mono and inserted as an editable draft | Physical device test, Russian accuracy/performance and Honor 400 compatibility |
 | QQ Knowledge | Product contracts/planning only | Document ingestion, indexing, retrieval, source attribution, access controls and deletion |
 | QQ-owned model | Candidate research, benchmark, data contract and validator | Select base/revision, curate approved data, train QQ checkpoint, evaluate, quantize and host |
 | QQ Game AI | Server contract and tests; same QQ Online gateway | Live model test; later integration into QQCross only after explicit approval |
@@ -295,3 +295,27 @@ A useful first online release is therefore measured in **weeks**, not hours. A s
 - Это подтверждает публикацию приложения и Worker, но **не подтверждает скачивание ONNX-весов, создание WebGPU-сессии и успешную генерацию** в мобильном браузере.
 - Физический запуск на Honor 400 не проводился. Совместимость GPU/браузера, объём памяти, прогрев модели, реальная задержка и качество русского OCR остаются открытыми.
 - QQ AI Online, серверная Vision-модель, анализ звука и полноценная мультимодальная модель не подключены.
+
+
+## Обновление 18 ноября 2026 — локальное распознавание русской речи
+
+### Реализация
+
+- Добавлен отдельный Web Worker `src/workers/local-speech.worker.ts` на `@huggingface/transformers`.
+- Используется мультиязычная ONNX-модель `onnx-community/whisper-tiny`, основанная на Whisper Tiny и совместимая с Transformers.js. Модель поддерживает мультиязычную расшифровку; русский задаётся явно параметром `language: "russian"`. [Карточка модели и пример Transformers.js](https://huggingface.co/onnx-community/whisper-tiny).
+- Worker запускает ASR через WebGPU. В браузере Transformers.js по умолчанию использует квантованные варианты моделей; опубликованные файлы Whisper Tiny включают квантованные decoder/encoder компоненты. Ориентир первой загрузки — примерно 70–90 МБ вместе со служебными файлами; точный объём зависит от набора файлов и кэша браузера. [Состав и размеры ONNX-файлов](https://huggingface.co/onnx-community/whisper-tiny/tree/main/onnx).
+- Загрузка модели запускается только по явному нажатию. Модель кэшируется библиотекой браузера после загрузки; сама запись пользователя в кэш и базу данных не сохраняется.
+- Запись микрофона запускается после разрешения пользователя, автоматически ограничивается 20 секундами и прекращается вручную либо по таймеру. MediaRecorder формирует временный blob в памяти; AudioContext декодирует звук, код преобразует каналы в mono и частоту в 16 кГц.
+- В Worker передаётся только временный Float32 audio buffer. После распознавания буфер обнуляется; сетевой маршрут для аудиозаписи не используется. На сервер не отправляются исходная запись или транскрипт самим модулем распознавания.
+- Расшифровка добавляется в черновик сообщения, не отправляется автоматически и остаётся редактируемой. Браузерный SpeechRecognition сохранён как альтернативный путь; его аудио может обрабатываться браузерным удалённым сервисом.
+
+### Проверки и ограничения
+
+- GitHub Actions run `44329282854`: SUCCESS — Game AI 6/6, online/search/media/memory/voice 62/62, dataset validator 4/4, TypeScript и Vite production build.
+- Добавлены тесты нормализации и resampling audio: stereo → mono, 48 kHz → 16 kHz, проверка лимита длительности, корректное добавление транскрипта в черновик и статические ограничения локального пути.
+- В production build включён отдельный Worker bundle; наличие bundle не означает, что Whisper-веса уже скачаны или что WebGPU inference выполнен.
+- Локальный путь требует WebGPU, разрешения микрофона, MediaRecorder и декодирования поддерживаемого браузером audio контейнера. Если браузер не поддерживает эти API или WebGPU, пользователь может использовать обычное браузерное распознавание либо вводить текст.
+- Whisper Tiny — компактная модель; точность русской речи, имён, пунктуации и длинных фраз может уступать более крупным системам. Текст нужно проверить перед отправкой.
+- Не проведён физический тест на Honor 400: поддержка WebGPU, загрузка весов, работа микрофона, скорость распознавания и расход памяти не подтверждены на устройстве.
+- Локальная запись ограничена 20 секундами на одно нажатие. Разговор в реальном времени/постоянное прослушивание и анализ звука видеороликов не реализованы.
+- QQ AI Online text endpoint и облачная Vision-модель остаются `unconfigured`; это локальный голосовой модуль, а не полнофункциональный облачный голосовой диалог.
