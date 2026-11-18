@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type TouchEvent as ReactTouchEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -88,7 +88,7 @@ export default function App() {
   const bottom = useRef<HTMLDivElement>(null);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
 
-  function handleTouchStart(event: React.TouchEvent<HTMLElement>) {
+  function handleTouchStart(event: ReactTouchEvent<HTMLElement>) {
     const touch = event.touches[0];
     if (touch) touchStart.current = { x: touch.clientX, y: touch.clientY };
   }
