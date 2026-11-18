@@ -10,11 +10,17 @@ import { buildMemoryInstruction, normalizeMemoryEntries, readStoredMemories, per
 import { canAttachMedia, selectVisionBackend, selectLocalVideoFrames } from "./lib/vision-routing";
 import { appendTranscript, resampleTo16kMono, SPEECH_SAMPLE_RATE, MAX_LOCAL_SPEECH_SECONDS } from "./lib/local-audio";
 import { getOtherLocalRuntimes, type LocalRuntime } from "./lib/local-runtime";
+import { withTimeout } from "./lib/with-timeout";
 
 type Message = ChatMessage;
 type MediaAttachment = { id: string; file: File; name: string; kind: "image" | "video"; previewUrl: string };
 type Mode = "online" | "offline";
 const MODEL_ID = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+const OFFLINE_MODEL_LOAD_TIMEOUT_MS = 15 * 60_000;
+const LOCAL_VISION_LOAD_TIMEOUT_MS = 8 * 60_000;
+const LOCAL_VISION_REQUEST_TIMEOUT_MS = 180_000;
+const LOCAL_SPEECH_LOAD_TIMEOUT_MS = 5 * 60_000;
+const LOCAL_SPEECH_REQUEST_TIMEOUT_MS = 90_000;
 const SYSTEM = `Ты QQ AI — полезный, честный и спокойный ИИ-помощник. Отвечай на языке пользователя. Если не знаешь ответа, прямо скажи об этом. Не выдумывай факты.\n\nФОРМАТ ОТВЕТОВ:\n- Используй Markdown: короткие жирные заголовки, абзацы, списки и таблицы, когда они действительно улучшают читаемость.\n- Ссылки оформляй как [понятный текст](https://...). Не создавай вымышленные ссылки.\n- В математике показывай понятные шаги и записывай формулы через LaTeX: $...$ внутри строки и $...$ отдельным блоком.\n- В конце математического решения выделяй итог одной строкой в формате ==Ответ: ...==; для уравнений по возможности используй \\boxed{...}.\n- Не называй ответ правильным, если вычисления не проверены. После решения проверь подстановкой или обратным вычислением, когда это возможно.\n- Завершай выполненную задачу ясным результатом, не продолжай работу без необходимости.`;
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
@@ -370,13 +376,27 @@ export default function App() {
       setStatus("Проверяем локальное хранилище модели…");
       const { CreateMLCEngine, prebuiltAppConfig } = await import("@mlc-ai/web-llm");
       const appConfig = { ...prebuiltAppConfig, cacheBackend: "indexeddb" as const };
-      const created = await CreateMLCEngine(MODEL_ID, {
+      let offlineLoadExpired = false;
+      const enginePromise = CreateMLCEngine(MODEL_ID, {
         appConfig,
         initProgressCallback: (report: { progress: number; text: string }) => {
+          if (offlineLoadExpired) return;
           setProgress(Math.max(0, Math.min(100, Math.round(report.progress * 100))));
           setStatus(report.text || "Подготавливаем офлайн-модель…");
         },
       });
+      let created;
+      try {
+        created = await withTimeout(
+          enginePromise,
+          OFFLINE_MODEL_LOAD_TIMEOUT_MS,
+          "Подготовка офлайн-модели заняла больше 15 минут. Загрузка остановлена; проверь WebGPU, свободную память и место в хранилище.",
+        );
+      } catch (failure) {
+        offlineLoadExpired = true;
+        void enginePromise.then(lateEngine => lateEngine.unload()).catch(() => {});
+        throw failure;
+      }
       engine.current = created;
       setOfflineReady(true);
       setStatus("Офлайн-модель готова и сохранена в браузере");
@@ -793,8 +813,12 @@ export default function App() {
       localVisionRequestRef.current?.reject(error);
       localVisionLoadPromiseRef.current = null;
       localVisionRequestRef.current = null;
+      if (localVisionWorkerRef.current === worker) localVisionWorkerRef.current = null;
+      worker.terminate();
+      setLocalVisionReady(false);
       setLocalVisionLoading(false);
-      setLocalVisionStatus("Локальная модель зрения не готова");
+      setLocalVisionProgress(0);
+      setLocalVisionStatus("Локальная модель зрения выгружена после сбоя. Её можно загрузить повторно.");
     };
 
     localVisionWorkerRef.current = worker;
@@ -811,9 +835,20 @@ export default function App() {
     try {
       await prepareLocalRuntime("vision");
       const worker = ensureLocalVisionWorker();
-      await new Promise<void>((resolve, reject) => {
-        localVisionLoadPromiseRef.current = { resolve, reject };
-        worker.postMessage({ type: "load" });
+      await withTimeout(
+        new Promise<void>((resolve, reject) => {
+          localVisionLoadPromiseRef.current = { resolve, reject };
+          worker.postMessage({ type: "load" });
+        }),
+        LOCAL_VISION_LOAD_TIMEOUT_MS,
+        "Загрузка локального Vision превысила 8 минут. Модель остановлена; можно повторить попытку.",
+      ).catch(failure => {
+        if (failure instanceof Error && failure.message.includes("превысила 8 минут")) {
+          localVisionLoadPromiseRef.current = null;
+          if (localVisionWorkerRef.current === worker) localVisionWorkerRef.current = null;
+          worker.terminate();
+        }
+        throw failure;
       });
       try { await navigator.storage?.persist?.(); } catch { /* Browser persistence is best-effort. */ }
       setStatus("Локальная модель зрения готова");
@@ -838,13 +873,27 @@ export default function App() {
     const worker = ensureLocalVisionWorker();
     const requestId = crypto.randomUUID();
 
-    return new Promise((resolve, reject) => {
-      if (localVisionRequestRef.current) {
-        reject(new Error("Локальная модель уже выполняет анализ."));
-        return;
+    return withTimeout(
+      new Promise<string>((resolve, reject) => {
+        if (localVisionRequestRef.current) {
+          reject(new Error("Локальная модель уже выполняет анализ."));
+          return;
+        }
+        localVisionRequestRef.current = { id: requestId, resolve, reject };
+        worker.postMessage({ type: "analyze", requestId, question, items });
+      }),
+      LOCAL_VISION_REQUEST_TIMEOUT_MS,
+      "Локальный анализ не завершился за 3 минуты. Модель выгружена для восстановления; повтори попытку.",
+    ).catch(failure => {
+      if (failure instanceof Error && failure.message.includes("не завершился за 3 минуты")) {
+        localVisionRequestRef.current = null;
+        if (localVisionWorkerRef.current === worker) localVisionWorkerRef.current = null;
+        worker.terminate();
+        setLocalVisionReady(false);
+        setLocalVisionProgress(0);
+        setLocalVisionStatus("Локальная модель зрения выгружена после тайм-аута. Загрузи её снова.");
       }
-      localVisionRequestRef.current = { id: requestId, resolve, reject };
-      worker.postMessage({ type: "analyze", requestId, question, items });
+      throw failure;
     });
   }
 
@@ -930,8 +979,12 @@ export default function App() {
       localSpeechRequestRef.current?.reject(failure);
       localSpeechLoadPromiseRef.current = null;
       localSpeechRequestRef.current = null;
+      if (localSpeechWorkerRef.current === worker) localSpeechWorkerRef.current = null;
+      worker.terminate();
+      setLocalSpeechReady(false);
       setLocalSpeechLoading(false);
-      setLocalSpeechStatus("Локальная модель речи не готова");
+      setLocalSpeechProgress(0);
+      setLocalSpeechStatus("Локальная модель речи выгружена после сбоя. Её можно загрузить повторно.");
     };
 
     localSpeechWorkerRef.current = worker;
@@ -948,9 +1001,20 @@ export default function App() {
     try {
       await prepareLocalRuntime("speech");
       const worker = ensureLocalSpeechWorker();
-      await new Promise<void>((resolve, reject) => {
-        localSpeechLoadPromiseRef.current = { resolve, reject };
-        worker.postMessage({ type: "load" });
+      await withTimeout(
+        new Promise<void>((resolve, reject) => {
+          localSpeechLoadPromiseRef.current = { resolve, reject };
+          worker.postMessage({ type: "load" });
+        }),
+        LOCAL_SPEECH_LOAD_TIMEOUT_MS,
+        "Загрузка Whisper превысила 5 минут. Модель остановлена; проверь соединение и повтори попытку.",
+      ).catch(failure => {
+        if (failure instanceof Error && failure.message.includes("превысила 5 минут")) {
+          localSpeechLoadPromiseRef.current = null;
+          if (localSpeechWorkerRef.current === worker) localSpeechWorkerRef.current = null;
+          worker.terminate();
+        }
+        throw failure;
       });
       try { await navigator.storage?.persist?.(); } catch { /* Browser persistence is best-effort. */ }
       setLocalSpeechStatus("Локальное распознавание готово");
@@ -971,13 +1035,27 @@ export default function App() {
     const worker = ensureLocalSpeechWorker();
     const requestId = crypto.randomUUID();
 
-    return new Promise((resolve, reject) => {
-      if (localSpeechRequestRef.current) {
-        reject(new Error("Локальная модель уже распознаёт запись."));
-        return;
+    return withTimeout(
+      new Promise<string>((resolve, reject) => {
+        if (localSpeechRequestRef.current) {
+          reject(new Error("Локальная модель уже распознаёт запись."));
+          return;
+        }
+        localSpeechRequestRef.current = { id: requestId, resolve, reject };
+        worker.postMessage({ type: "transcribe", requestId, samples }, [samples.buffer]);
+      }),
+      LOCAL_SPEECH_REQUEST_TIMEOUT_MS,
+      "Локальное распознавание не завершилось за 90 секунд. Модель выгружена для восстановления; повтори попытку.",
+    ).catch(failure => {
+      if (failure instanceof Error && failure.message.includes("не завершилось за 90 секунд")) {
+        localSpeechRequestRef.current = null;
+        if (localSpeechWorkerRef.current === worker) localSpeechWorkerRef.current = null;
+        worker.terminate();
+        setLocalSpeechReady(false);
+        setLocalSpeechProgress(0);
+        setLocalSpeechStatus("Whisper выгружена после тайм-аута. Загрузи модель снова.");
       }
-      localSpeechRequestRef.current = { id: requestId, resolve, reject };
-      worker.postMessage({ type: "transcribe", requestId, samples }, [samples.buffer]);
+      throw failure;
     });
   }
 

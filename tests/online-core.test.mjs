@@ -761,3 +761,19 @@ test("online mode never silently falls back to the offline Qwen model", async ()
   assert.match(handler, /Онлайн-режим не переключается автоматически/);
   assert.match(app, /mode === "online" && <button className="secondary-button"/);
 });
+
+test("local model operations have bounded timeouts and worker crashes reset stale worker references", async () => {
+  const { withTimeout } = await import("../src/lib/with-timeout.ts");
+  await assert.rejects(
+    () => withTimeout(new Promise(() => {}), 5, "model timeout"),
+    /model timeout/,
+  );
+  const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
+  assert.match(app, /OFFLINE_MODEL_LOAD_TIMEOUT_MS = 15 \* 60_000/);
+  assert.match(app, /LOCAL_VISION_LOAD_TIMEOUT_MS = 8 \* 60_000/);
+  assert.match(app, /LOCAL_VISION_REQUEST_TIMEOUT_MS = 180_000/);
+  assert.match(app, /LOCAL_SPEECH_LOAD_TIMEOUT_MS = 5 \* 60_000/);
+  assert.match(app, /LOCAL_SPEECH_REQUEST_TIMEOUT_MS = 90_000/);
+  assert.match(app, /localVisionWorkerRef\.current = null;\s*worker\.terminate\(\)/);
+  assert.match(app, /localSpeechWorkerRef\.current = null;\s*worker\.terminate\(\)/);
+});
