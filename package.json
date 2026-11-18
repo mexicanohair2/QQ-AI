@@ -28,5 +28,8 @@
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "@vitejs/plugin-react": "5.2.0"
+  },
+  "overrides": {
+    "katex": "0.19.1"
   }
 }
