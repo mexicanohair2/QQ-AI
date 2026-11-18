@@ -582,3 +582,23 @@ test("local and cloud memory preferences use the newest explicit setting", async
   values.set("qq-ai-memory-enabled-v1", "true");
   assert.deepEqual(readStoredMemoryPreference(storage), { enabled: true, updatedAt: 0 });
 });
+
+test("local memories and opt-in settings are isolated by account scope", async () => {
+  const { readStoredMemories, persistStoredMemories, readStoredMemoryPreference, persistStoredMemoryEnabled } = await import("../src/lib/user-memory.ts");
+  const values = new Map();
+  const storage = {
+    getItem(key) { return values.has(key) ? values.get(key) : null; },
+    setItem(key, value) { values.set(key, value); },
+  };
+  persistStoredMemories(["Анонимная запись"], storage);
+  persistStoredMemories(["Память аккаунта A"], storage, "user-a");
+  persistStoredMemories(["Память аккаунта B"], storage, "user-b");
+  persistStoredMemoryEnabled(true, storage, 100, "user-a");
+  persistStoredMemoryEnabled(false, storage, 200, "user-b");
+  assert.deepEqual(readStoredMemories(storage), ["Анонимная запись"]);
+  assert.deepEqual(readStoredMemories(storage, "user-a"), ["Память аккаунта A"]);
+  assert.deepEqual(readStoredMemories(storage, "user-b"), ["Память аккаунта B"]);
+  assert.equal(readStoredMemoryPreference(storage, "user-a")?.enabled, true);
+  assert.equal(readStoredMemoryPreference(storage, "user-b")?.enabled, false);
+  assert.equal(readStoredMemoryPreference(storage, "user-c"), null);
+});
