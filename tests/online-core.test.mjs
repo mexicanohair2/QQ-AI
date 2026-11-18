@@ -265,3 +265,27 @@ test("chat and standalone search cancel failed upstream response bodies", async 
   assert.match(chat, /if \(!response\.ok\) \{[\s\S]*?response\.body\?\.cancel\(\)/);
   assert.match(search, /if \(!response\.ok\) \{[\s\S]*?response\.body\?\.cancel\(\)/);
 });
+
+test("chat history storage filters malformed records and bounds restored messages", async () => {
+  const { sanitizeChatMessages } = await import("../src/lib/chat-storage.ts");
+  const input = [
+    { role: "system", content: "not a visible chat role" },
+    { role: "user", content: 42 },
+    { role: "assistant", content: "x".repeat(120_001) },
+    { role: "user", content: "valid", attachments: [{ name: "photo.jpg", kind: "image" }, { name: "../bad", kind: "other" }] },
+    ...Array.from({ length: 45 }, (_, index) => ({ role: "assistant", content: "message-" + index })),
+  ];
+  const messages = sanitizeChatMessages(input);
+  assert.equal(messages.length, 40);
+  assert.equal(messages[0].content, "message-5");
+  assert.equal(messages.at(-1).content, "message-44");
+  const single = sanitizeChatMessages([input[3]]);
+  assert.deepEqual(single[0].attachments, [{ name: "photo.jpg", kind: "image" }]);
+});
+
+test("image and video attachment controls stay disabled until a vision model is configured", async () => {
+  const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
+  assert.match(app, /if \(visionReady !== true\)/);
+  assert.match(app, /disabled=\{busy \|\| mode !== "online" \|\| visionReady !== true\}/);
+  assert.match(app, /async function sendVision[\s\S]*?if \(visionReady !== true\)/);
+});
