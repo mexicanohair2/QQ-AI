@@ -457,3 +457,22 @@ test("search route rejects a cross-origin request without contacting providers",
     globalThis.fetch = originalFetch;
   }
 });
+
+test("chat route rejects a cross-origin request even when Host is absent", async () => {
+  const { default: chatHandler } = await import("../api/chat.ts");
+  const originalFetch = globalThis.fetch;
+  let fetchCalled = false;
+  globalThis.fetch = async () => { fetchCalled = true; throw new Error("should not be called"); };
+  try {
+    const request = new Request("https://qq-ai.test/api/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://attacker.example" },
+      body: JSON.stringify({ messages: [{ role: "user", content: "hello" }] }),
+    });
+    const response = await chatHandler(request);
+    assert.equal(response.status, 403);
+    assert.equal(fetchCalled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
