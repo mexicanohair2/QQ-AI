@@ -59,3 +59,10 @@ A useful first online release is therefore measured in **weeks**, not hours. A s
 - Do not ask the user to paste API keys into chat.
 - Keep Qwen Offline separate from QQ Online; no silent fallback.
 - Report each milestone only after its tests pass. Never label a UI placeholder as working AI.
+
+
+## Обновление 18 ноября 2026 — явный запуск QQ Search
+
+Добавлена отдельная кнопка поиска в поле сообщения. Она вызывает `POST /api/search` напрямую и не зависит от наличия QQ Online inference endpoint; поиск можно использовать и при выбранном локальном режиме. Кнопка блокируется при пустом запросе, активной задаче или прикреплённых медиафайлах. Результат явно помечается как поисковая выдача, а не как ответ генеративной модели.
+
+Это делает веб-поиск доступным как отдельную рабочую функцию, но не устраняет главный блокер QQ AI Online: собственные веса модели и сервер инференса пока не размещены. Vision также остаётся без модели. Новая кнопка должна пройти CI и проверку preview до объявления доступной в развёрнутой версии.

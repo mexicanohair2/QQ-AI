@@ -311,3 +311,17 @@ body{
   .attachment-preview img,.attachment-preview video{width:39px;height:39px}
   .attachment-note{font-size:8px}
 }
+
+/* Explicit QQ Search action: usable independently of online model availability */
+.search-button{
+  width:39px;height:39px;flex:none;display:grid;place-items:center;
+  border:1px solid #c18aa54d;border-radius:13px;
+  background:linear-gradient(140deg,#38263c,#2d223e);
+  color:#e6c1d5;font-size:25px;line-height:1;
+  transition:transform .2s,border-color .2s,background .2s;
+}
+.search-button:hover:not(:disabled){
+  transform:translateY(-2px);border-color:#d4a0c5a8;
+  background:linear-gradient(140deg,#693b57,#4a345e);
+}
+.search-button:disabled{opacity:.35;cursor:not-allowed}

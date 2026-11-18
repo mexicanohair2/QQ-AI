@@ -74,3 +74,17 @@ test("QQCross Game AI uses the same QQ-owned online model gateway", async () => 
   assert.doesNotMatch(source, /CEREBRAS_API_KEY|api\.cerebras\.ai/);
   assert.match(source, /authenticate\(request\)/);
 });
+
+
+test("manual QQ Search works independently of the online generation model", async () => {
+  const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const start = app.indexOf("async function searchWeb()");
+  const end = app.indexOf("async function sendOnline(", start);
+  assert.ok(start >= 0 && end > start, "manual search handler should exist");
+  const handler = app.slice(start, end);
+  assert.match(handler, /sendSearchFallback\(content\)/);
+  assert.doesNotMatch(handler, /sendOnline|sendOffline/);
+  assert.match(handler, /setStatus\("Поиск завершён"\)/);
+  assert.match(app, /aria-label="Поиск в интернете"/);
+  assert.match(app, /disabled=\{!draft\.trim\(\) \|\| attachments\.length > 0 \|\| busy\}/);
+});

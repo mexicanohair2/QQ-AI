@@ -260,6 +260,35 @@ export default function App() {
     return result.answer;
   }
 
+  async function searchWeb() {
+    const content = draft.trim();
+    if (!content || busy) return;
+    if (attachments.length > 0) {
+      setError("Сначала отправь или удали вложения, затем запускай отдельный поиск.");
+      return;
+    }
+
+    const next = [...messages, { role: "user" as const, content }];
+    setMessages([...next, { role: "assistant", content: "" }]);
+    setDraft("");
+    setBusy(true);
+    setError("");
+    setStatus("QQ Search ищет страницы в интернете…");
+
+    try {
+      const answer = await sendSearchFallback(content);
+      setMessages([...next, { role: "assistant", content: answer }]);
+      setStatus("Поиск завершён");
+      await notifyTaskComplete();
+    } catch (e) {
+      setMessages(next);
+      setError(e instanceof Error ? e.message : "Не удалось выполнить поиск.");
+      setStatus("Поиск не удался");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function sendOnline(history: Message[]) {
     const response = await fetch("/api/chat", {
       method: "POST",
@@ -688,6 +717,7 @@ export default function App() {
           <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm" multiple hidden onChange={handleFileSelection} />
           <button className="attach-button" type="button" onClick={() => fileInputRef.current?.click()} disabled={busy || mode !== "online"} aria-label="Прикрепить фото или видео" title={mode === "online" ? "Прикрепить фото или видео" : "Медиа доступно в онлайн-режиме"}>＋</button>
           <textarea value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }} placeholder={mode === "online" ? "Спросите о чём угодно…" : offlineReady ? "Сообщение для Qwen…" : "Можно посчитать пример или загрузить Qwen"} rows={1} disabled={busy} />
+          <button className="search-button" type="button" onClick={() => void searchWeb()} disabled={!draft.trim() || attachments.length > 0 || busy} aria-label="Поиск в интернете" title="Искать запрос в интернете">⌕</button>
           <button className={`voice-button ${listening ? "listening" : ""}`} onClick={() => listening ? stopVoiceRecognition() : setVoiceNoticeOpen(true)} disabled={busy} aria-label={listening ? "Остановить запись" : "Голосовой ввод"} title={listening ? "Остановить запись" : "Голосовой ввод"}>{listening ? "■" : "🎙"}</button>
           <button className="send-button" onClick={() => void send()} disabled={(!draft.trim() && attachments.length === 0) || busy} aria-label="Отправить"><span>↑</span></button>
         </div>
