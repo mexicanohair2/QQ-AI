@@ -285,11 +285,11 @@ export default function App() {
       const recognition = new Recognition();
       recognition.lang = "ru-RU";
       recognition.continuous = false;
-      recognition.interimResults = true;
+      recognition.interimResults = false;
       recognition.onresult = (event: any) => {
         let transcript = "";
         for (let i = event.resultIndex || 0; i < event.results.length; i += 1) {
-          transcript += event.results[i][0]?.transcript || "";
+          if (event.results[i].isFinal) transcript += event.results[i][0]?.transcript || "";
         }
         if (transcript.trim()) {
           setDraft(current => current.trim() ? current.trimEnd() + " " + transcript.trim() : transcript.trim());
