@@ -93,13 +93,13 @@ test("manual QQ Search works independently of the online generation model", asyn
 test("OpenAI stream reader handles split CRLF events and a final event without a blank-line terminator", async () => {
   const { readOpenAIChatStream } = await import("../src/lib/openai-stream.ts");
   const encoder = new TextEncoder();
-  const chunks = [
-    "data: {\"choices\":[{\"delta\":{\"content\":\"Прив\"}}]}\\r",
-    "\\n\\r\\ndata: {\"choices\":[{\"delta\":{\"content\":\"ет\"}}]}",
-  ];
+  const crlf = String.fromCharCode(13, 10);
+  const first = 'data: {"choices":[{"delta":{"content":"Прив"}}]}' + String.fromCharCode(13);
+  const second = String.fromCharCode(10, 13, 10) + 'data: {"choices":[{"delta":{"content":"ет"}}]}';
   const body = new ReadableStream({
     start(controller) {
-      for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+      controller.enqueue(encoder.encode(first));
+      controller.enqueue(encoder.encode(second));
       controller.close();
     },
   });
@@ -129,7 +129,8 @@ test("OpenAI stream reader rejects empty and oversized responses", async () => {
   const payload = "x".repeat(120_001);
   const oversized = new ReadableStream({
     start(controller) {
-      controller.enqueue(new TextEncoder().encode("data: " + JSON.stringify({ choices: [{ delta: { content: payload } }] }) + "\\n\\n"));
+      const frame = "data: " + JSON.stringify({ choices: [{ delta: { content: payload } }] }) + String.fromCharCode(10, 10);
+      controller.enqueue(new TextEncoder().encode(frame));
       controller.close();
     },
   });
