@@ -9,15 +9,13 @@ import { calculateMathQuestion } from "./lib/math";
 import { dataUrlToBase64, prepareImage, sampleVideoFrames } from "./lib/media";
 import { buildSearchContext, shouldSearchWeb, type QQSearchSource } from "./lib/qq-ai-core";
 import { readOpenAIChatStream } from "./lib/openai-stream";
-import { readChatMessages, type ChatMessage } from "./lib/chat-storage";
+import { readChatMessages, persistChatMessages, readChatThreadId, persistChatThreadId, type ChatMessage } from "./lib/chat-storage";
 import { buildMemoryInstruction, normalizeMemoryEntries, readStoredMemories, persistStoredMemories, readStoredMemoryPreference, resolveMemoryEnabled, persistStoredMemoryEnabled, MAX_MEMORY_CHARS } from "./lib/user-memory";
 
 type Message = ChatMessage;
 type MediaAttachment = { id: string; file: File; name: string; kind: "image" | "video"; previewUrl: string };
 type Mode = "online" | "offline";
 const MODEL_ID = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
-const CHAT_KEY = "qq-ai-chat-v2";
-const THREAD_KEY = "qq-ai-thread-v1";
 const SYSTEM = `Ты QQ AI — полезный, честный и спокойный ИИ-помощник. Отвечай на языке пользователя. Если не знаешь ответа, прямо скажи об этом. Не выдумывай факты.\n\nФОРМАТ ОТВЕТОВ:\n- Используй Markdown: короткие жирные заголовки, абзацы, списки и таблицы, когда они действительно улучшают читаемость.\n- Ссылки оформляй как [понятный текст](https://...). Не создавай вымышленные ссылки.\n- В математике показывай понятные шаги и записывай формулы через LaTeX: $...$ внутри строки и $...$ отдельным блоком.\n- В конце математического решения выделяй итог одной строкой в формате ==Ответ: ...==; для уравнений по возможности используй \\boxed{...}.\n- Не называй ответ правильным, если вычисления не проверены. После решения проверь подстановкой или обратным вычислением, когда это возможно.\n- Завершай выполненную задачу ясным результатом, не продолжай работу без необходимости.`;
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
@@ -55,7 +53,7 @@ function VoiceIcon() {
 }
 
 export default function App() {
-  const [messages, setMessages] = useState<Message[]>(readChatMessages);
+  const [messages, setMessages] = useState<Message[]>(() => readChatMessages(undefined, "anonymous"));
   const [mode, setMode] = useState<Mode>("offline");
   const [status, setStatus] = useState("Локальная модель ещё не загружена");
   const [progress, setProgress] = useState(0);
@@ -73,6 +71,7 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState("");
   const [session, setSession] = useState<Session | null>(null);
+  const [authLoaded, setAuthLoaded] = useState(!supabase);
   const [email, setEmail] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [otpSent, setOtpSent] = useState(false);
@@ -96,10 +95,11 @@ export default function App() {
   const [threads, setThreads] = useState<Array<{id:string;title:string;updated_at:string}>>([]);
   const [cloudStatus, setCloudStatus] = useState("Только на этом устройстве");
   const [cloudLoaded, setCloudLoaded] = useState(false);
-  const [threadId, setThreadId] = useState(() => {
-    try { return localStorage.getItem(THREAD_KEY) || crypto.randomUUID(); }
-    catch { return "qq-ai-" + Date.now(); }
-  });
+  const [threadId, setThreadId] = useState(() =>
+    readChatThreadId(undefined, "anonymous") || crypto.randomUUID()
+  );
+  const chatPersistenceReadyRef = useRef(false);
+  const chatPersistenceScopeRef = useRef("anonymous");
   const engine = useRef<any>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
@@ -148,12 +148,23 @@ export default function App() {
   }, [memories, memoryEnabled, session?.user?.id, cloudLoaded]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(CHAT_KEY, JSON.stringify(messages.slice(-40)));
-      localStorage.setItem(THREAD_KEY, threadId);
-    } catch { /* local storage may be unavailable */ }
+    const chatScope = session?.user?.id ?? "anonymous";
+    if (!chatPersistenceReadyRef.current) {
+      chatPersistenceReadyRef.current = true;
+      chatPersistenceScopeRef.current = chatScope;
+      return;
+    }
+    if (chatPersistenceScopeRef.current !== chatScope) {
+      chatPersistenceScopeRef.current = chatScope;
+      return;
+    }
+    if (supabase && !authLoaded) return;
+    if (session?.user && !cloudLoaded) return;
+
+    persistChatMessages(messages, undefined, chatScope);
+    persistChatThreadId(threadId, undefined, chatScope);
     bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, threadId]);
+  }, [messages, threadId, session?.user?.id, authLoaded, cloudLoaded]);
 
   useEffect(() => {
     let alive = true;
@@ -175,9 +186,13 @@ export default function App() {
     if (!supabase) return;
     let alive = true;
     supabase.auth.getSession().then(({ data }) => {
-      if (alive) setSession(data.session);
+      if (alive) {
+        setSession(data.session);
+        setAuthLoaded(true);
+      }
     });
     const { data: listener } = supabase.auth.onAuthStateChange((event, next) => {
+      setAuthLoaded(true);
       if (event === "SIGNED_IN" || event === "SIGNED_OUT" || event === "USER_UPDATED") {
         setCloudLoaded(false);
       }
@@ -187,8 +202,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!authLoaded) return;
     if (!supabase || !session?.user) {
-      setCloudLoaded(false);
+      setMessages(readChatMessages(undefined, "anonymous"));
+      setThreadId(readChatThreadId(undefined, "anonymous") || crypto.randomUUID());
+      setCloudLoaded(true);
       setCloudStatus("Только на этом устройстве");
       setMemories(readStoredMemories(undefined, "anonymous"));
       setMemoryEnabled(readStoredMemoryPreference(undefined, "anonymous")?.enabled ?? false);
@@ -197,6 +215,8 @@ export default function App() {
     let alive = true;
     setCloudLoaded(false);
     setCloudStatus("Подключаем облако…");
+    setMessages(readChatMessages(undefined, session.user.id));
+    setThreadId(readChatThreadId(undefined, session.user.id) || crypto.randomUUID());
     setMemories(readStoredMemories(undefined, session.user.id));
     setMemoryEnabled(readStoredMemoryPreference(undefined, session.user.id)?.enabled ?? false);
     Promise.all([
@@ -247,7 +267,7 @@ export default function App() {
       setCloudLoaded(true);
     }).catch(() => { if (alive) { setCloudStatus("Не удалось подключить облако"); setCloudLoaded(true); } });
     return () => { alive = false; };
-  }, [session?.user?.id]);
+  }, [authLoaded, session?.user?.id]);
 
   useEffect(() => {
     if (!supabase || !session?.user || !cloudLoaded || messages.length === 0) return;
@@ -680,7 +700,7 @@ export default function App() {
     const selected = attachments;
     const content = draft.trim() || (selected.length ? (selected[0].kind === "video" ? "Проанализируй это видео по выбранным кадрам." : "Проанализируй прикреплённое изображение.") : "");
     if ((!content && selected.length === 0) || busy) return;
-    if (supabase && session?.user && !cloudLoaded) {
+    if (supabase && (!authLoaded || !cloudLoaded)) {
       setError("QQ AI синхронизирует данные аккаунта. Подожди окончания загрузки и повтори отправку.");
       return;
     }
