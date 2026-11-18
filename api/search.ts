@@ -69,6 +69,7 @@ export default async function handler(request: Request): Promise<Response> {
           signal: providerController.signal,
         });
         if (!response.ok) {
+          try { await response.body?.cancel(); } catch { /* upstream may already be closed */ }
           providerFailures.push(provider.name + ":" + response.status);
           continue;
         }
