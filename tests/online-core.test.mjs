@@ -563,3 +563,22 @@ test("memory enabled state persists locally alongside saved entries", async () =
   assert.equal(readStoredMemoryEnabled(storage), false);
   assert.equal(readStoredMemoryEnabled({ getItem() { return null; }, setItem() {} }), null);
 });
+
+test("local and cloud memory preferences use the newest explicit setting", async () => {
+  const { resolveMemoryEnabled, persistStoredMemoryEnabled, readStoredMemoryPreference } = await import("../src/lib/user-memory.ts");
+  const values = new Map();
+  const storage = {
+    getItem(key) { return values.has(key) ? values.get(key) : null; },
+    setItem(key, value) { values.set(key, value); },
+  };
+  assert.equal(resolveMemoryEnabled(null, true, 100), true);
+  assert.equal(resolveMemoryEnabled(null, false, 100), false);
+  assert.equal(resolveMemoryEnabled({ enabled: true, updatedAt: 200 }, false, 100), true);
+  assert.equal(resolveMemoryEnabled({ enabled: false, updatedAt: 90 }, true, 100), true);
+  assert.equal(resolveMemoryEnabled({ enabled: false, updatedAt: 100 }, true, 100), true);
+  assert.equal(resolveMemoryEnabled({ enabled: true, updatedAt: 1 }, null, null), true);
+  persistStoredMemoryEnabled(false, storage, 250);
+  assert.deepEqual(readStoredMemoryPreference(storage), { enabled: false, updatedAt: 250 });
+  values.set("qq-ai-memory-enabled-v1", "true");
+  assert.deepEqual(readStoredMemoryPreference(storage), { enabled: true, updatedAt: 0 });
+});
