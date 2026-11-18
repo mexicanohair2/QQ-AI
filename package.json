@@ -14,8 +14,7 @@
   "dependencies": {
     "@mlc-ai/web-llm": "0.2.88",
     "@supabase/supabase-js": "2.57.4",
-    "@vitejs/plugin-react": "latest",
-    "vite": "6.2.7",
+    "vite": "6.4.6",
     "react": "latest",
     "react-dom": "latest",
     "katex": "^0.19.1",
