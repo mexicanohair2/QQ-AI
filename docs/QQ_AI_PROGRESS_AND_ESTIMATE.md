@@ -100,3 +100,13 @@ A useful first online release is therefore measured in **weeks**, not hours. A s
 ### Границы релиза
 
 Эта версия годится для проверки интерфейса, отдельного веб-поиска и подготовки Qwen Offline. Она **не является завершённым релизом QQ AI Online**. PR остаётся draft; merge, production deploy, интеграция в QQCross и APK не выполнялись.
+
+
+### Дополнительная проверка Supabase 18 ноября 2026
+
+- Проверено, что таблицы `qq_ai_threads`, `qq_ai_preferences` и `qq_ai_feedback` существуют, RLS включён.
+- Проверены политики: чтение/изменение диалогов и предпочтений ограничено `auth.uid() = user_id`; отправка и чтение feedback также ограничены владельцем.
+- Добавлена и проверена миграция `add_qq_ai_feedback_thread_id_index`: индекс `qq_ai_feedback_thread_id_idx` ускоряет связь feedback с диалогом.
+- Vercel содержит `VITE_SUPABASE_URL` и `VITE_SUPABASE_PUBLISHABLE_KEY` для preview/production/development; значения ключей не включены в этот отчёт.
+- Supabase Security Advisor сообщает, что защита от скомпрометированных паролей отключена. QQ AI использует OTP-вход по email, а не парольный вход; настройка остаётся отдельным пунктом проверки.
+- Сам факт наличия RLS и env-переменных не подтверждает реальную доставку OTP-писем. Фактический вход с тестовым почтовым адресом и синхронизация на двух устройствах пока не проверены.
