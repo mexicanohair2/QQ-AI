@@ -53,8 +53,8 @@ function remarkAnswerUnderline() {
 
 export default function App() {
   const [messages, setMessages] = useState<Message[]>(readMessages);
-  const [mode, setMode] = useState<Mode>("offline");
-  const [status, setStatus] = useState("Подготовьте офлайн-модель Qwen");
+  const [mode, setMode] = useState<Mode>("online");
+  const [status, setStatus] = useState("QQ AI Online · облачный режим");
   const [progress, setProgress] = useState(0);
   const [busy, setBusy] = useState(false);
   const [notifyOnComplete, setNotifyOnComplete] = useState(() => {
@@ -365,13 +365,7 @@ export default function App() {
         return;
       }
       if (mode === "online") {
-        try {
-          await sendOnline(next);
-        } catch (onlineError) {
-          if (!offlineReady || !engine.current) throw onlineError;
-          setStatus("Облачный ИИ недоступен — переключаемся на Qwen…");
-          await sendOffline(next);
-        }
+        await sendOnline(next);
       } else {
         await sendOffline(next);
       }
@@ -487,7 +481,7 @@ export default function App() {
           <button className="history-open-button" onClick={() => void showHistory()}>История</button>
           <button className="cloud-pill" onClick={() => setAuthOpen(true)}><span className={session ? "cloud-dot connected" : "cloud-dot"} />{session ? "Облако" : "Синхронизация"}</button>
           <div className="mode-switch" aria-label="Режим работы">
-            <button className={mode === "online" ? "selected" : ""} onClick={() => { setMode("online"); setError(""); setStatus("Онлайн-режим"); }}>Онлайн</button>
+            <button className={mode === "online" ? "selected" : ""} onClick={() => { setMode("online"); setError(""); setStatus("QQ AI Online · облачный режим"); }}>Онлайн</button>
             <button className={mode === "offline" ? "selected" : ""} onClick={() => { setMode("offline"); setError(""); setStatus(offlineReady ? "Офлайн-модель готова" : "Сначала подготовь офлайн-модель"); }}>Офлайн</button>
           </div>
           <button className="icon-button" onClick={() => setSettingsOpen(true)} aria-label="Настройки">⚙</button>
@@ -532,7 +526,7 @@ export default function App() {
           <button className={`voice-button ${listening ? "listening" : ""}`} onClick={() => listening ? stopVoiceRecognition() : setVoiceNoticeOpen(true)} disabled={busy} aria-label={listening ? "Остановить запись" : "Голосовой ввод"} title={listening ? "Остановить запись" : "Голосовой ввод"}>{listening ? "■" : "🎙"}</button>
           <button className="send-button" onClick={() => void send()} disabled={!draft.trim() || busy} aria-label="Отправить"><span>↑</span></button>
         </div>
-        <div className="composer-meta"><span>{status}</span><span className="composer-meta-actions"><button className={`notification-toggle ${notifyOnComplete ? "enabled" : ""}`} onClick={() => void toggleCompletionNotifications()} title="Уведомить, когда задача завершится">{notifyOnComplete ? "Уведомления включены" : "Уведомлять о готовности"}</button><span>{modeLabel} · {mode === "offline" ? "Qwen 0.5B" : "Cerebras GLM 4.7 · облачная модель"}</span></span></div>
+        <div className="composer-meta"><span>{status}</span><span className="composer-meta-actions"><button className={`notification-toggle ${notifyOnComplete ? "enabled" : ""}`} onClick={() => void toggleCompletionNotifications()} title="Уведомить, когда задача завершится">{notifyOnComplete ? "Уведомления включены" : "Уведомлять о готовности"}</button><span>{modeLabel} · {mode === "offline" ? "Qwen 0.5B" : "QQ AI Online · облачная модель"}</span></span></div>
       </footer>
     </section>
 
