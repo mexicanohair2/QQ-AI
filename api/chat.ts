@@ -98,7 +98,7 @@ async function runSearch(query: string, signal: AbortSignal) {
 
 function rejectCrossOrigin(request: Request): Response | null {
   const origin = request.headers.get("origin");
-  const host = request.headers.get("host");
+  const host = request.headers.get("host") || new URL(request.url).host;
   if (!origin || !host) return null;
   try {
     const parsed = new URL(origin);
