@@ -18,8 +18,9 @@ function gcd(a: number, b: number): number {
 }
 
 function evaluateExpression(source: string): number | null {
-  const tokens = source.match(/\d+(?:\.\d+)?|[()+*/%-]/g);
-  if (!tokens || tokens.join("") !== source.replace(/\s+/g, "")) return null;
+  const parsedTokens = source.match(/\d+(?:\.\d+)?|[()+*/%-]/g);
+  if (!parsedTokens || parsedTokens.join("") !== source.replace(/\s+/g, "")) return null;
+  const tokens: string[] = parsedTokens;
   let index = 0;
 
   function primary(): number {
