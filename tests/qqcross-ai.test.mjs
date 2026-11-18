@@ -69,5 +69,5 @@ test("requires clue output to preserve the exact approved answer set", () => {
       { answer: "СОБАКА", clue: "Верный питомец." },
     ],
   });
-  assert.throws(() => parseGameAiResult(changed, request), /изменил или повторил/);
+  assert.throws(() => parseGameAiResult(changed, request), /изменила или повторила/);
 });
