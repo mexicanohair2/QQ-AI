@@ -78,6 +78,8 @@ export default function App() {
   const [authOpen, setAuthOpen] = useState(false);
   const [voiceNoticeOpen, setVoiceNoticeOpen] = useState(false);
   const [listening, setListening] = useState(false);
+  const [speakingMessageIndex, setSpeakingMessageIndex] = useState<number | null>(null);
+  const speechRunRef = useRef(0);
   const recognitionRef = useRef<any>(null);
   const [authMessage, setAuthMessage] = useState("");
   const [memoryEnabled, setMemoryEnabled] = useState(false);
@@ -299,7 +301,7 @@ export default function App() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        messages: [{ role: "system", content: SYSTEM + (memoryEnabled && memories.length ? "\\nПользователь разрешил учитывать эти предпочтения: " + memories.join("; ") : "") }, ...history],
+        messages: [{ role: "system", content: SYSTEM + (memoryEnabled && memories.length ? "\nПользователь разрешил учитывать эти предпочтения: " + memories.join("; ") : "") }, ...history],
       }),
     });
     if (!response.ok) {
@@ -481,6 +483,73 @@ export default function App() {
     return result.answer;
   }
 
+  function stopSpeech() {
+    speechRunRef.current += 1;
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    setSpeakingMessageIndex(null);
+  }
+
+  function speakMessage(content: string, index: number) {
+    if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
+      setError("Этот браузер не поддерживает озвучивание текста.");
+      return;
+    }
+    if (speakingMessageIndex === index) {
+      stopSpeech();
+      return;
+    }
+
+    const normalized = content
+      .replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/g, "$1")
+      .replace(/https?:\/\/\S+/g, "ссылка")
+      .replace(/```[\s\S]*?```/g, "Блок кода.")
+      .replace(/[`*_#>|]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!normalized) return;
+
+    const sentences = normalized.match(/[^.!?…]+[.!?…]*/gu) || [normalized];
+    const chunks: string[] = [];
+    let current = "";
+    for (const sentence of sentences) {
+      if (current && current.length + sentence.length > 1_800) {
+        chunks.push(current.trim());
+        current = "";
+      }
+      current += sentence;
+    }
+    if (current.trim()) chunks.push(current.trim());
+
+    window.speechSynthesis.cancel();
+    const run = ++speechRunRef.current;
+    let cursor = 0;
+    setSpeakingMessageIndex(index);
+    const speakNext = () => {
+      if (speechRunRef.current !== run) return;
+      if (cursor >= chunks.length) {
+        setSpeakingMessageIndex(null);
+        return;
+      }
+      const utterance = new SpeechSynthesisUtterance(chunks[cursor++]);
+      utterance.lang = "ru-RU";
+      utterance.rate = 1;
+      utterance.onend = speakNext;
+      utterance.onerror = () => {
+        if (speechRunRef.current === run) {
+          setSpeakingMessageIndex(null);
+          setError("Не удалось озвучить ответ. Проверь доступность голосов в браузере.");
+        }
+      };
+      window.speechSynthesis.speak(utterance);
+    };
+    speakNext();
+  }
+
+  useEffect(() => () => {
+    speechRunRef.current += 1;
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  }, []);
+
   function beginVoiceRecognition() {
     const Recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!Recognition) {
@@ -586,13 +655,29 @@ export default function App() {
           await notifyTaskComplete();
           return;
         }
-        if (mode === "online") {
+        if (mode === "online" && onlineModelReady === false) {
+          if (offlineReady) {
+            setMode("offline");
+            setStatus("Облачная модель не подключена. Переключаюсь на локальную…");
+            await sendOffline(next);
+          } else if (shouldSearchWeb(content)) {
+            const searchAnswer = await sendSearchFallback(content);
+            setMessages([...next, { role: "assistant", content: searchAnswer }]);
+          } else {
+            throw new Error("Облачная модель QQ AI ещё не подключена. Переключись на «Офлайн» и загрузи локальную модель, чтобы получить ответ.");
+          }
+        } else if (mode === "online") {
           try {
             await sendOnline(next);
           } catch (onlineError) {
-            if (!shouldSearchWeb(content)) throw onlineError;
-            const searchAnswer = await sendSearchFallback(content);
-            setMessages([...next, { role: "assistant", content: searchAnswer }]);
+            if (offlineReady) {
+              setMode("offline");
+              setStatus("Онлайн-модель недоступна. Переключаюсь на локальную…");
+              await sendOffline(next);
+            } else if (shouldSearchWeb(content)) {
+              const searchAnswer = await sendSearchFallback(content);
+              setMessages([...next, { role: "assistant", content: searchAnswer }]);
+            } else throw onlineError;
           }
         } else await sendOffline(next);
       }
@@ -742,7 +827,7 @@ export default function App() {
             <div className="message-body"><div className="sender">{m.role === "assistant" ? "QQ AI" : "Вы"}</div>
               {m.attachments?.length ? <div className="message-attachment-labels">{m.attachments.map((item, index) => <span key={index}>{item.kind === "video" ? "▶" : "▧"} {item.name}</span>)}</div> : null}
               <div className={`bubble ${m.role === "assistant" ? "markdown-body" : "user-text"}`}>{m.content ? (m.role === "assistant" ? <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkAnswerUnderline]} rehypePlugins={[rehypeKatex]}>{m.content}</ReactMarkdown> : m.content) : (busy ? <span className="typing"><i/><i/><i/></span> : "")}</div>
-              {m.role === "assistant" && m.content && <div className="feedback"><button title="Полезный ответ" onClick={() => void rateAnswer(1)}>↑</button><button title="Неудачный ответ" onClick={() => void rateAnswer(-1)}>↓</button><small>Оценить ответ</small></div>}
+              {m.role === "assistant" && m.content && <div className="feedback"><button className={`speak-button ${speakingMessageIndex === i ? "active" : ""}`} title={speakingMessageIndex === i ? "Остановить озвучивание" : "Озвучить ответ"} aria-label={speakingMessageIndex === i ? "Остановить озвучивание" : "Озвучить ответ"} aria-pressed={speakingMessageIndex === i} disabled={busy && i === messages.length - 1} onClick={() => speakMessage(m.content, i)}>{speakingMessageIndex === i ? "Стоп" : "Озвучить"}</button><button title="Полезный ответ" onClick={() => void rateAnswer(1)}>↑</button><button title="Неудачный ответ" onClick={() => void rateAnswer(-1)}>↓</button><small>Оценить ответ</small></div>}
             </div>
           </article>)}
           <div ref={bottom} />
