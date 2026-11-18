@@ -602,3 +602,26 @@ test("local memories and opt-in settings are isolated by account scope", async (
   assert.equal(readStoredMemoryPreference(storage, "user-b")?.enabled, false);
   assert.equal(readStoredMemoryPreference(storage, "user-c"), null);
 });
+
+test("local chat history and thread IDs are isolated by account scope", async () => {
+  const {
+    readChatMessages, persistChatMessages, readChatThreadId, persistChatThreadId,
+  } = await import("../src/lib/chat-storage.ts");
+  const values = new Map();
+  const storage = {
+    getItem(key) { return values.has(key) ? values.get(key) : null; },
+    setItem(key, value) { values.set(key, value); },
+  };
+  persistChatMessages([{ role: "user", content: "Анонимный диалог" }], storage);
+  persistChatMessages([{ role: "user", content: "История пользователя A" }], storage, "user-a");
+  persistChatMessages([{ role: "user", content: "История пользователя B" }], storage, "user-b");
+  persistChatThreadId("thread-a", storage, "user-a");
+  persistChatThreadId("thread-b", storage, "user-b");
+  assert.equal(readChatMessages(storage)[0].content, "Анонимный диалог");
+  assert.equal(readChatMessages(storage, "user-a")[0].content, "История пользователя A");
+  assert.equal(readChatMessages(storage, "user-b")[0].content, "История пользователя B");
+  assert.equal(readChatThreadId(storage, "user-a"), "thread-a");
+  assert.equal(readChatThreadId(storage, "user-b"), "thread-b");
+  assert.equal(readChatThreadId(storage, "user-c"), null);
+  assert.equal(persistChatThreadId("bad thread", storage, "user-a"), false);
+});
