@@ -1,11 +1,11 @@
-import { readRequestTextLimited, readResponseTextLimited } from "../src/lib/bounded-response";
+import { readRequestTextLimited, readResponseTextLimited } from "../src/lib/bounded-response.ts";
 import {
   buildSearchContext,
   parseDuckDuckGoResults,
   parseBingResults,
   mergeSearchResults,
   shouldSearchWeb,
-} from "../src/lib/qq-ai-core";
+} from "../src/lib/qq-ai-core.ts";
 
 export const config = { runtime: "edge" };
 
