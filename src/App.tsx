@@ -10,7 +10,7 @@ import { dataUrlToBase64, prepareImage, sampleVideoFrames } from "./lib/media";
 import { buildSearchContext, shouldSearchWeb, type QQSearchSource } from "./lib/qq-ai-core";
 import { readOpenAIChatStream } from "./lib/openai-stream";
 import { readChatMessages, type ChatMessage } from "./lib/chat-storage";
-import { buildMemoryInstruction, normalizeMemoryEntries, MAX_MEMORY_CHARS } from "./lib/user-memory";
+import { buildMemoryInstruction, normalizeMemoryEntries, readStoredMemories, persistStoredMemories, MAX_MEMORY_CHARS } from "./lib/user-memory";
 
 type Message = ChatMessage;
 type MediaAttachment = { id: string; file: File; name: string; kind: "image" | "video"; previewUrl: string };
@@ -85,7 +85,7 @@ export default function App() {
   const [authMessage, setAuthMessage] = useState("");
   const [memoryEnabled, setMemoryEnabled] = useState(false);
   const [memoryDraft, setMemoryDraft] = useState("");
-  const [memories, setMemories] = useState<string[]>([]);
+  const [memories, setMemories] = useState<string[]>(() => readStoredMemories());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(() => {
     try { return localStorage.getItem("qq-ai-sidebar-hidden") !== "1"; }
@@ -127,6 +127,10 @@ export default function App() {
     try { localStorage.setItem("qq-ai-sidebar-hidden", sidebarVisible ? "0" : "1"); }
     catch { /* local storage may be unavailable */ }
   }, [sidebarVisible]);
+
+  useEffect(() => {
+    persistStoredMemories(memories);
+  }, [memories]);
 
   useEffect(() => {
     try {
@@ -189,7 +193,7 @@ export default function App() {
       }
       if (prefsResult.data) {
         setMemoryEnabled(Boolean(prefsResult.data.memory_enabled));
-        setMemories(normalizeMemoryEntries(prefsResult.data.learned_preferences));
+        setMemories(normalizeMemoryEntries([...readStoredMemories(), ...prefsResult.data.learned_preferences]));
       }
       setCloudStatus("Облако подключено");
       if (threadResult.error || prefsResult.error) setCloudStatus("Облако подключено частично");
@@ -893,7 +897,7 @@ export default function App() {
 
     {settingsOpen && <div className="modal-backdrop" onClick={() => setSettingsOpen(false)}><section className="modal settings-modal" onClick={e => e.stopPropagation()}>
       <button className="modal-close" onClick={() => setSettingsOpen(false)}>×</button><div className="eyebrow">ПЕРСОНАЛИЗАЦИЯ</div><h2>Память QQ AI</h2>
-      <p>Память выключена по умолчанию. Если включить её, QQ AI сможет учитывать только те предпочтения, которые ты сам добавишь.</p>
+      <p>Память выключена по умолчанию. Записи хранятся на этом устройстве и после входа могут синхронизироваться с облаком. Не сохраняй пароли и другие секретные данные.</p>
       <label className="toggle-row"><span><b>Использовать память</b><small>Учитывать сохранённые предпочтения в ответах</small></span><input type="checkbox" checked={memoryEnabled} onChange={e => void toggleMemory(e.target.checked)} /></label>
       <div className="memory-entry"><input className="modal-input" value={memoryDraft} maxLength={MAX_MEMORY_CHARS} onChange={e => setMemoryDraft(e.target.value)} placeholder="Например: объясняй коротко и с примерами" /><button className="secondary-button" onClick={() => void saveMemory()}>Добавить</button></div>
       {memories.length > 0 && <ul className="memory-list">{memories.map((m, i) => <li key={i}>{m}<button onClick={() => void removeMemory(i)}>Удалить</button></li>)}</ul>}
