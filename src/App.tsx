@@ -1406,14 +1406,14 @@ export default function App() {
       <button className="modal-close" onClick={() => { if (!localSpeechRecording && !localSpeechTranscribing) setVoiceNoticeOpen(false); }} disabled={localSpeechRecording || localSpeechTranscribing}>×</button><div className="modal-symbol"><VoiceIcon /></div><h2>Голосовой ввод</h2>
       <p>Можно использовать распознавание браузера: в зависимости от него звук может обрабатываться внешним сервисом. Локальный вариант скачивает мультиязычную Whisper Tiny и обрабатывает запись на устройстве; аудио не отправляется и не сохраняется. Расшифровка появится в поле сообщения — проверь её перед отправкой.</p>
       {!localSpeechReady && <button className="secondary-button full" onClick={() => void loadLocalSpeechModel()} disabled={localSpeechLoading || busy}>
-        {localSpeechLoading ? "Загружаем модель · " + localSpeechProgress + "%" : "Загрузить локальную модель · ~75 МБ"}
+        {localSpeechLoading ? "Загружаем модель · " + localSpeechProgress + "%" : "Загрузить локальную модель · ~70–90 МБ"}
       </button>}
       {localSpeechLoading && <small>{localSpeechStatus || "Скачивание и подготовка…"}</small>}
       {localSpeechReady && !localSpeechRecording && !localSpeechTranscribing && <button className="secondary-button full" onClick={() => void startLocalSpeechRecording()} disabled={busy}>Записать локально</button>}
       {localSpeechRecording && <button className="primary full" onClick={stopLocalSpeechRecording}>Остановить и распознать</button>}
       {localSpeechTranscribing && <small>Распознаём запись на устройстве…</small>}
       {localSpeechStatus && <small>{localSpeechStatus}</small>}
-      <button className="primary full" style={{marginTop:8}} onClick={() => { setVoiceNoticeOpen(false); beginVoiceRecognition(); }} disabled={localSpeechRecording}>Продолжить через браузер</button>
+      <button className="primary full" style={{marginTop:8}} onClick={() => { setVoiceNoticeOpen(false); beginVoiceRecognition(); }} disabled={localSpeechRecording || localSpeechTranscribing}>Продолжить через браузер</button>
       <button className="secondary-button full" style={{marginTop:8}} onClick={() => setVoiceNoticeOpen(false)} disabled={localSpeechRecording}>Отмена</button>
     </section></div>}
 
