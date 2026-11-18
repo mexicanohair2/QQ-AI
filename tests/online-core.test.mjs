@@ -52,7 +52,7 @@ test("browser media pipeline compresses images and uploads only sampled video fr
   assert.match(app, /исходный ролик/);
 });
 
-test("online UI does not silently switch to offline Qwen", async () => {
+test("online UI does not silently switch to the offline model", async () => {
   const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
   assert.match(app, /if \(mode === "online"\) \{/);
   assert.match(app, /if \(!shouldSearchWeb\(content\)\) throw onlineError/);
@@ -151,8 +151,8 @@ test("chat gateway keeps its upstream timeout active for the lifetime of the res
 test("welcome screen offers an explicit path to the offline model when online inference is unconfigured", async () => {
   const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
   assert.match(app, /Онлайн-модель пока не подключена/);
-  assert.match(app, /Открыть Qwen/);
-  assert.match(app, /Перейти к Qwen/);
+  assert.match(app, /Открыть локальный режим/);
+  assert.match(app, /Перейти в офлайн-режим/);
 });
 
 
@@ -288,4 +288,16 @@ test("image and video attachment controls stay disabled until a vision model is 
   assert.match(app, /if \(visionReady !== true\)/);
   assert.match(app, /disabled=\{busy \|\| mode !== "online" \|\| visionReady !== true\}/);
   assert.match(app, /async function sendVision[\s\S]*?if \(visionReady !== true\)/);
+});
+
+
+test("offline model branding is hidden from the interface and voice input uses a vector icon", async () => {
+  const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const internalModelId = 'const MODEL_ID = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";';
+  assert.ok(app.includes(internalModelId));
+  assert.doesNotMatch(app.replace(internalModelId, ""), /Qwen/i);
+  assert.match(app, /function VoiceIcon\(\)/);
+  assert.doesNotMatch(app, /🎙/);
+  assert.match(app, /gpu\.requestAdapter\(\)/);
+  assert.match(app, /if \(!adapter\)/);
 });
