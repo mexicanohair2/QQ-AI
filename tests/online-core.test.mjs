@@ -711,7 +711,7 @@ test("local speech recording is browser-only, bounded and editable before sendin
   assert.match(app, /MAX_LOCAL_SPEECH_SECONDS \* 1000/);
   assert.match(app, /decodeAndTranscribeLocalAudio\(blob\)/);
   assert.match(app, /setDraft\(current => appendTranscript\(current, transcript\)\)/);
-  assert.match(app, /Загрузить локальную модель · ~75 МБ/);
+  assert.match(app, /Загрузить локальную модель · ~70–90 МБ/);
   assert.match(worker, /onnx-community\/whisper-tiny/);
   assert.match(worker, /device: "webgpu"/);
   assert.match(worker, /language: "russian"/);
