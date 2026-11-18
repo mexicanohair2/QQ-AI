@@ -25,12 +25,16 @@ test("web search is a separate real endpoint and is treated as untrusted evidenc
 
 test("capabilities distinguish actual online, search, vision, video and offline states", async () => {
   const source = await readFile(new URL("../api/capabilities.ts", import.meta.url), "utf8");
-  for (const key of ["onlineText", "webSearch", "imageUnderstanding", "localVision", "videoUnderstanding", "offlineText"]) assert.ok(source.includes(key));
+  for (const key of ["onlineText", "webSearch", "imageUnderstanding", "localVision", "localSpeech", "videoUnderstanding", "offlineText"]) assert.ok(source.includes(key));
   assert.match(source, /state: hasVision \? "configured" : "unconfigured"/);
   assert.match(source, /DuckDuckGo HTML \+ Bing HTML/);
   assert.match(source, /providers: \["DuckDuckGo", "Bing"\]/);
   assert.match(source, /state: "implemented_device_check_required"/);
   assert.match(source, /runtime: "WebGPU browser worker"/);
+  assert.match(source, /model: "onnx-community\/whisper-tiny"/);
+  assert.match(source, /languages: "multilingual; Russian transcription"/);
+  assert.match(source, /audioSentToServer: false/);
+  assert.match(source, /maxRecordingSeconds: 20/);
   assert.match(source, /audioAnalysis: false/);
   assert.match(source, /физический тест Honor 400 ещё не проведён/);
 });
@@ -664,4 +668,55 @@ test("local video frame selection preserves the full time range", async () => {
   assert.ok(selected[2].id > selected[1].id);
   assert.ok(selected[3].id > selected[2].id);
   assert.equal(selectLocalVideoFrames(frames, 1)[0].id, 3);
+});
+
+test("local Whisper audio conversion mixes channels and resamples to 16 kHz", async () => {
+  const { resampleTo16kMono, appendTranscript, SPEECH_SAMPLE_RATE, MAX_LOCAL_SPEECH_SECONDS } =
+    await import("../src/lib/local-audio.ts");
+
+  const mono16k = new Float32Array([0, 0.25, -0.25, 0.5]);
+  assert.deepEqual(Array.from(resampleTo16kMono([mono16k], 16_000)), [0, 0.25, -0.25, 0.5]);
+
+  const left = new Float32Array([0.5, 0.5, -0.5, -0.5]);
+  const right = new Float32Array([0.5, -0.5, 0.5, -0.5]);
+  assert.deepEqual(Array.from(resampleTo16kMono([left, right], 16_000)), [0.5, 0, 0, -0.5]);
+
+  const at48k = new Float32Array(48_000).fill(0.2);
+  const converted = resampleTo16kMono([at48k], 48_000);
+  assert.equal(converted.length, 16_000);
+  assert.equal(SPEECH_SAMPLE_RATE, 16_000);
+  assert.equal(MAX_LOCAL_SPEECH_SECONDS, 20);
+  assert.ok(Math.abs(converted[100] - 0.2) < 0.0001);
+
+  assert.equal(appendTranscript("Привет", " мир. "), "Привет мир.");
+  assert.equal(appendTranscript("", "  новая фраза  "), "новая фраза");
+  assert.equal(appendTranscript("Текущий текст", "   "), "Текущий текст");
+});
+
+test("local Whisper audio conversion rejects invalid sample rates and recordings over the limit", async () => {
+  const { resampleTo16kMono } = await import("../src/lib/local-audio.ts");
+  assert.throws(() => resampleTo16kMono([new Float32Array([0.1])], 0), /Частота аудио/);
+  assert.throws(() => resampleTo16kMono([], 16_000), /аудиоканалы/);
+  assert.throws(() => resampleTo16kMono([new Float32Array(16_000 * 21)], 16_000), /слишком длинная/);
+  assert.throws(() => resampleTo16kMono([new Float32Array(10), new Float32Array(9)], 16_000), /несовместимый формат/);
+});
+
+test("local speech recording is browser-only, bounded and editable before sending", async () => {
+  const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const worker = await readFile(new URL("../src/workers/local-speech.worker.ts", import.meta.url), "utf8");
+  const audio = await readFile(new URL("../src/lib/local-audio.ts", import.meta.url), "utf8");
+
+  assert.match(app, /navigator\.mediaDevices\.getUserMedia/);
+  assert.match(app, /new MediaRecorder/);
+  assert.match(app, /MAX_LOCAL_SPEECH_SECONDS \* 1000/);
+  assert.match(app, /decodeAndTranscribeLocalAudio\(blob\)/);
+  assert.match(app, /setDraft\(current => appendTranscript\(current, transcript\)\)/);
+  assert.match(app, /Загрузить локальную модель · ~75 МБ/);
+  assert.match(worker, /onnx-community\/whisper-tiny/);
+  assert.match(worker, /device: "webgpu"/);
+  assert.match(worker, /language: "russian"/);
+  assert.match(worker, /task: "transcribe"/);
+  assert.match(worker, /MAX_SAMPLES = 16_000 \* 20/);
+  assert.match(audio, /SPEECH_SAMPLE_RATE = 16_000/);
+  assert.doesNotMatch(worker, /fetch\(/);
 });
