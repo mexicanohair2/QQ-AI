@@ -30,7 +30,7 @@ export function decodeHtmlEntities(value: string): string {
 }
 
 function escapeMarkdownLabel(value: string): string {
-  return value.replace(/([\\\x60*_{}\[\]()#+.!|>])/g, "\\\\$1");
+  return value.replace(/([\\\x60*_{}\[\]()#+.!|>])/g, "\\$1");
 }
 
 function plainText(value: string): string {
