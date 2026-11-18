@@ -248,3 +248,13 @@ test("manual search endpoint uses a provider fallback and returns only parsed or
   assert.match(search, /SEARCH_PROVIDERS_UNAVAILABLE/);
   assert.match(search, /synthesizedByModel: false/);
 });
+
+test("vision gateway bounds upstream JSON and never relays provider error diagnostics", async () => {
+  const source = await readFile(new URL("../api/vision.ts", import.meta.url), "utf8");
+  assert.match(source, /readResponseTextLimited\(upstream, 256_000\)/);
+  assert.match(source, /upstream\.body\?\.cancel\(\)/);
+  assert.match(source, /answer\.length > 20_000/);
+  assert.doesNotMatch(source, /await upstream\.json\(\)|await upstream\.text\(\)/);
+  const errorBranch = source.slice(source.indexOf("if (!upstream.ok)"), source.indexOf("let rawResult: string"));
+  assert.doesNotMatch(errorBranch, /upstream\.status|detail|apiKey|Authorization|token/i);
+});
