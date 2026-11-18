@@ -1,6 +1,6 @@
 # QQ AI — progress and realistic delivery estimate
 
-Last verified: 2026-11-18. This document describes the feature branch preview, not a production release.
+Last verified: 2026-11-18 (branch head `9397b40f565250c1edfc5f42c01c6dab5d58568f`). This document describes the feature branch preview, not a production release.
 
 ## Verified now
 
@@ -66,3 +66,37 @@ A useful first online release is therefore measured in **weeks**, not hours. A s
 Добавлена отдельная кнопка поиска в поле сообщения. Она вызывает `POST /api/search` напрямую и не зависит от наличия QQ Online inference endpoint; поиск можно использовать и при выбранном локальном режиме. Кнопка блокируется при пустом запросе, активной задаче или прикреплённых медиафайлах. Результат явно помечается как поисковая выдача, а не как ответ генеративной модели.
 
 Это делает веб-поиск доступным как отдельную рабочую функцию, но не устраняет главный блокер QQ AI Online: собственные веса модели и сервер инференса пока не размещены. Vision также остаётся без модели. Новая кнопка должна пройти CI и проверку preview до объявления доступной в развёрнутой версии.
+
+
+## Обновление 18 ноября 2026 — устойчивость чата, UX и зависимости
+
+### Что добавлено и проверено
+
+- Потоковый клиентский парсер вынесен в `src/lib/openai-stream.ts`. Он обрабатывает разрезанные сетевые чанки, CRLF/LF-разделители, последний SSE-фрагмент без завершающей пустой строки, совместимый JSON-ответ, пустые/ошибочные ответы и ограничение размера.
+- В `api/chat.ts` таймер 55 секунд теперь действует до фактического закрытия или отмены потока, а не снимается сразу после отправки заголовков ответа.
+- Если QQ Online не настроен, стартовый экран предлагает явно перейти к Qwen Offline. Ошибка проверки статуса больше не маскируется под подтверждённое отсутствие модели.
+- Плагины сборки отделены от runtime-зависимостей: Vite и `@vitejs/plugin-react` находятся в devDependencies. Vite закреплён на 6.4.6, React-плагин — на 5.2.0.
+- KaTeX закреплён на 0.19.1; npm override заставляет `rehype-katex` и `micromark-extension-math` использовать исправленную версию вместо вложенной 0.16.x.
+- В CI добавлен отдельный отчёт аудита runtime-зависимостей.
+
+### Проверки и preview
+
+- GitHub Actions для commit `9397b40f565250c1edfc5f42c01c6dab5d58568f` завершился успешно: benchmark syntax, training-data validator, Game AI tests, online-core tests, TypeScript и production build.
+- Preview deployment `dpl_5iDDEjG7aUPYi2fQZLYgB3Kf4GmQ` — READY: https://qq-ai-preview-gdex0scdx-mexicanohaie.vercel.app
+- Проверено: главная страница отвечает HTTP 200; `/api/capabilities` отвечает HTTP 200.
+- Фактический capability status preview: QQ Online — unconfigured; QQ Search — available (DuckDuckGo snippets); image/video understanding — unconfigured; Qwen Offline — available при поддержке WebGPU и достаточном хранилище.
+- `npm audit --omit=dev` в CI: 0 уязвимостей runtime-зависимостей.
+- Полный audit продолжает показывать 4 high для dev/build-цепочки Vite → fdir/tinyglobby/picomatch. В текущем дереве это инструменты разработки/сборки, не runtime-зависимости приложения. Для picomatch GitHub Advisory указывает затронутые версии до 4.0.7; опубликованного исправленного релиза в используемом registry на момент проверки нет. Не подавлять предупреждение и перепроверять при обновлении toolchain.
+- Vite сообщает о крупном WebLLM chunk около 6.16 MB (gzip около 2.18 MB). Это код локального движка, загружаемый при переходе к офлайн-модели, а не обычный стартовый HTML/основной UI chunk. Оптимизация загрузки остаётся отдельной задачей.
+
+### Что всё ещё не подтверждено
+
+- Онлайн-генерация QQ AI не работает до размещения реальной модели и inference endpoint. Никакая настройка интерфейса не заменяет веса модели и GPU.
+- Vision и видеоанализ не работают без vision endpoint. Видеокадры подготавливаются локально, звук не анализируется.
+- Не проведён физический тест на Honor 400: WebGPU, первое скачивание Qwen, память браузера, микрофон и мобильная производительность остаются непроверенными.
+- HTTP 200 для страницы и capability API не доказывает успешную работу POST-поиска, инференса или устройства. Эти сценарии требуют отдельной функциональной проверки.
+- В репозитории пока нет зафиксированного `package-lock.json`; CI разрешает зависимости через `npm install`. Добавление воспроизводимого lockfile остаётся задачей следующего этапа.
+
+### Границы релиза
+
+Эта версия годится для проверки интерфейса, отдельного веб-поиска и подготовки Qwen Offline. Она **не является завершённым релизом QQ AI Online**. PR остаётся draft; merge, production deploy, интеграция в QQCross и APK не выполнялись.
