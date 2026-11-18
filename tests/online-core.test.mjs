@@ -9,7 +9,7 @@ test("online route is a project-owned model gateway, not a Cerebras proxy", asyn
   assert.match(source, /ONLINE_MODEL_UNCONFIGURED/);
   assert.match(source, /safeModelEndpoint/);
   assert.doesNotMatch(source, /CEREBRAS_API_KEY/);
-  assert.match(source, /raw\.length > 520_000/);
+  assert.match(source, /readRequestTextLimited\\(request, 520_000\\)/);
 });
 
 test("web search is a separate real endpoint and is treated as untrusted evidence", async () => {
