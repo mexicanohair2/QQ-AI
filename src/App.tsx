@@ -7,6 +7,7 @@ import { buildSearchContext, shouldSearchWeb, type QQSearchSource } from "./lib/
 import { readOpenAIChatStream } from "./lib/openai-stream";
 import { readChatMessages, persistChatMessages, readChatThreadId, persistChatThreadId, type ChatMessage } from "./lib/chat-storage";
 import { buildMemoryInstruction, normalizeMemoryEntries, readStoredMemories, persistStoredMemories, readStoredMemoryPreference, resolveMemoryEnabled, persistStoredMemoryEnabled, MAX_MEMORY_CHARS } from "./lib/user-memory";
+import { canAttachMedia, selectVisionBackend, selectLocalVideoFrames } from "./lib/vision-routing";
 
 type Message = ChatMessage;
 type MediaAttachment = { id: string; file: File; name: string; kind: "image" | "video"; previewUrl: string };
@@ -30,6 +31,13 @@ export default function App() {
   const [offlineReady, setOfflineReady] = useState(false);
   const [onlineModelReady, setOnlineModelReady] = useState<boolean | null>(null);
   const [visionReady, setVisionReady] = useState<boolean | null>(null);
+  const [localVisionReady, setLocalVisionReady] = useState(false);
+  const [localVisionLoading, setLocalVisionLoading] = useState(false);
+  const [localVisionProgress, setLocalVisionProgress] = useState(0);
+  const [localVisionStatus, setLocalVisionStatus] = useState("");
+  const localVisionWorkerRef = useRef<Worker | null>(null);
+  const localVisionLoadPromiseRef = useRef<{ resolve: () => void; reject: (error: Error) => void } | null>(null);
+  const localVisionRequestRef = useRef<{ id: string; resolve: (answer: string) => void; reject: (error: Error) => void } | null>(null);
   const [capabilitiesUnavailable, setCapabilitiesUnavailable] = useState(false);
   const [draft, setDraft] = useState("");
   const [attachments, setAttachments] = useState<MediaAttachment[]>([]);
@@ -419,14 +427,10 @@ export default function App() {
     const selected = Array.from(event.currentTarget.files ?? []);
     event.currentTarget.value = "";
     if (!selected.length) return;
-    if (mode !== "online") {
-      setError("Фото и видео обрабатываются только в режиме QQ AI Online.");
-      return;
-    }
-    if (visionReady !== true) {
-      setError(visionReady === false
-        ? "Модуль анализа изображений и видео QQ AI ещё не подключён."
-        : "Сначала дождись проверки доступности модуля Vision.");
+    if (!canAttachMedia(mode, visionReady === true, localVisionReady)) {
+      setError(mode === "online" && visionReady === null
+        ? "Сначала дождись проверки облачного Vision или загрузи локальную модель зрения."
+        : "Загрузи локальную модель зрения, чтобы анализировать фото и видео прямо на устройстве.");
       return;
     }
     const videos = selected.filter(file => file.type.startsWith("video/"));
@@ -478,7 +482,8 @@ export default function App() {
   }
 
   async function sendVision(history: Message[], selected: MediaAttachment[]): Promise<string> {
-    if (visionReady !== true) throw new Error("Модуль анализа изображений и видео QQ AI ещё не подключён.");
+    const backend = selectVisionBackend(mode, visionReady === true, localVisionReady);
+    if (backend === "unavailable") throw new Error("Для анализа фото и видео подключи облачный Vision или загрузи локальную модель зрения.");
     const question = [...history].reverse().find(message => message.role === "user")?.content || "Проанализируй вложение.";
     const isVideo = selected[0]?.kind === "video";
     let items: Array<{ mimeType: string; dataBase64: string; timestampMs?: number }>;
@@ -487,7 +492,8 @@ export default function App() {
     if (isVideo) {
       setStatus("QQ AI выбирает кадры видео прямо на устройстве…");
       const frames = await sampleVideoFrames(selected[0].file);
-      items = frames.map(frame => ({
+      const selectedFrames = backend === "local" ? selectLocalVideoFrames(frames, 4) : frames;
+      items = selectedFrames.map(frame => ({
         mimeType: frame.mimeType,
         dataBase64: dataUrlToBase64(frame.dataUrl),
         timestampMs: frame.timestampMs,
@@ -499,6 +505,23 @@ export default function App() {
         mimeType: image.mimeType,
         dataBase64: dataUrlToBase64(image.dataUrl),
       }));
+    }
+
+    if (backend === "local") {
+      setStatus(isVideo ? "Локальная модель анализирует видеокадры на устройстве…" : "Локальная модель анализирует фото на устройстве…");
+      const localItems = items.map(item => ({
+        dataUrl: "data:" + item.mimeType + ";base64," + item.dataBase64,
+        ...(typeof item.timestampMs === "number" ? { timestampMs: item.timestampMs } : {}),
+      }));
+      const answer = await analyzeWithLocalVision(question, localItems);
+      const localNote = "\n\n_Изображения обработаны локально в браузере и не отправлялись на сервер. Небольшая модель может ошибаться; проверь важные детали._";
+      if (isVideo) {
+        const frameNote = "\n\nЛокально рассмотрены кадры с отметками: " +
+          items.map(item => ((item.timestampMs ?? 0) / 1000).toFixed(1) + " с").join(", ") +
+          ". Звук видео не анализировался.";
+        return answer + frameNote + localNote;
+      }
+      return answer + localNote;
     }
 
     setStatus(isVideo ? "QQ AI анализирует выбранные кадры…" : "QQ AI анализирует изображение…");
@@ -587,6 +610,151 @@ export default function App() {
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   }, []);
 
+  function ensureLocalVisionWorker(): Worker {
+    if (localVisionWorkerRef.current) return localVisionWorkerRef.current;
+
+    const worker = new Worker(new URL("./workers/local-vision.worker.ts", import.meta.url), {
+      type: "module",
+    });
+
+    worker.onmessage = (event: MessageEvent) => {
+      const data = event.data as {
+        type?: string;
+        progress?: number | null;
+        file?: string;
+        status?: string;
+        message?: string;
+        requestId?: string | null;
+        answer?: string;
+        dtype?: string;
+      };
+
+      if (data.type === "loading") {
+        setLocalVisionStatus(typeof data.message === "string" ? data.message : "Подготавливаем модель зрения…");
+        return;
+      }
+
+      if (data.type === "progress") {
+        if (typeof data.progress === "number" && Number.isFinite(data.progress)) {
+          const percent = data.progress <= 1 ? data.progress * 100 : data.progress;
+          setLocalVisionProgress(Math.max(0, Math.min(100, Math.round(percent))));
+        }
+        setLocalVisionStatus(data.file || data.status || "Скачиваем компоненты модели…");
+        return;
+      }
+
+      if (data.type === "ready") {
+        setLocalVisionReady(true);
+        setLocalVisionLoading(false);
+        setLocalVisionProgress(100);
+        setLocalVisionStatus("Локальная модель зрения готова");
+        const pending = localVisionLoadPromiseRef.current;
+        localVisionLoadPromiseRef.current = null;
+        pending?.resolve();
+        return;
+      }
+
+      if (data.type === "token") {
+        setLocalVisionStatus("Локальная модель анализирует изображение…");
+        return;
+      }
+
+      if (data.type === "answer" && typeof data.requestId === "string") {
+        const pending = localVisionRequestRef.current;
+        if (pending?.id === data.requestId) {
+          localVisionRequestRef.current = null;
+          pending.resolve(typeof data.answer === "string" ? data.answer : "");
+        }
+        return;
+      }
+
+      if (data.type === "error") {
+        const errorMessage = typeof data.message === "string" ? data.message : "Ошибка локального анализа изображения.";
+        if (typeof data.requestId === "string") {
+          const pending = localVisionRequestRef.current;
+          if (pending?.id === data.requestId) {
+            localVisionRequestRef.current = null;
+            pending.reject(new Error(errorMessage));
+          }
+        } else {
+          const pending = localVisionLoadPromiseRef.current;
+          localVisionLoadPromiseRef.current = null;
+          pending?.reject(new Error(errorMessage));
+        }
+        setLocalVisionLoading(false);
+        setLocalVisionStatus("Локальная модель зрения не готова");
+        setError(errorMessage);
+      }
+    };
+
+    worker.onerror = () => {
+      const error = new Error("Локальный модуль зрения завершился с ошибкой. Повтори загрузку модели.");
+      localVisionLoadPromiseRef.current?.reject(error);
+      localVisionRequestRef.current?.reject(error);
+      localVisionLoadPromiseRef.current = null;
+      localVisionRequestRef.current = null;
+      setLocalVisionLoading(false);
+      setLocalVisionStatus("Локальная модель зрения не готова");
+    };
+
+    localVisionWorkerRef.current = worker;
+    return worker;
+  }
+
+  async function loadLocalVisionModel() {
+    if (localVisionReady || localVisionLoading) return;
+    setLocalVisionLoading(true);
+    setLocalVisionProgress(0);
+    setLocalVisionStatus("Проверяем поддержку WebGPU…");
+    setError("");
+
+    try {
+      const worker = ensureLocalVisionWorker();
+      await new Promise<void>((resolve, reject) => {
+        localVisionLoadPromiseRef.current = { resolve, reject };
+        worker.postMessage({ type: "load" });
+      });
+      try { await navigator.storage?.persist?.(); } catch { /* Browser persistence is best-effort. */ }
+      setStatus("Локальная модель зрения готова");
+      setError("");
+    } catch (error) {
+      setLocalVisionLoading(false);
+      const message = error instanceof Error ? error.message : "Не удалось загрузить локальную модель зрения.";
+      setLocalVisionStatus("Локальная модель зрения не готова");
+      setError(message);
+    } finally {
+      localVisionLoadPromiseRef.current = null;
+    }
+  }
+
+  function analyzeWithLocalVision(
+    question: string,
+    items: Array<{ dataUrl: string; timestampMs?: number }>,
+  ): Promise<string> {
+    if (!localVisionReady) {
+      return Promise.reject(new Error("Сначала загрузи локальную модель зрения."));
+    }
+    const worker = ensureLocalVisionWorker();
+    const requestId = crypto.randomUUID();
+
+    return new Promise((resolve, reject) => {
+      if (localVisionRequestRef.current) {
+        reject(new Error("Локальная модель уже выполняет анализ."));
+        return;
+      }
+      localVisionRequestRef.current = { id: requestId, resolve, reject };
+      worker.postMessage({ type: "analyze", requestId, question, items });
+    });
+  }
+
+  useEffect(() => () => {
+    localVisionLoadPromiseRef.current?.reject(new Error("Окно QQ AI закрыто."));
+    localVisionRequestRef.current?.reject(new Error("Окно QQ AI закрыто."));
+    localVisionWorkerRef.current?.terminate();
+    localVisionWorkerRef.current = null;
+  }, []);
+
+
   function beginVoiceRecognition() {
     const Recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!Recognition) {
@@ -673,8 +841,8 @@ export default function App() {
       setError("Сначала нажми «Загрузить и запустить ИИ» и дождись завершения подготовки модели.");
       return;
     }
-    if (selected.length > 0 && mode !== "online") {
-      setError("Переключись в онлайн-режим: локальная модель не обрабатывает фото и видео.");
+    if (selected.length > 0 && selectVisionBackend(mode, visionReady === true, localVisionReady) === "unavailable") {
+      setError("Сначала загрузи локальную модель зрения или подключи облачный Vision.");
       return;
     }
     const attachmentInfo = selected.map(item => ({ name: item.name, kind: item.kind }));
@@ -896,6 +1064,12 @@ export default function App() {
 
       {error && <div className="error-banner">{error}{mode === "online" && onlineModelReady === false && error.includes("ещё не размещена") && <button className="secondary-button" onClick={() => { setMode("offline"); setError(""); setStatus(offlineReady ? "Офлайн-модель готова" : "Сначала подготовь офлайн-модель"); }}>Перейти в офлайн-режим</button>}</div>}
       {mode === "offline" && !offlineReady && messages.length > 0 && <div className="offline-inline"><span>Офлайн-модель не загружена</span><button onClick={loadOfflineModel} disabled={busy}>Подготовить</button>{busy && <span>{progress}%</span>}</div>}
+      {!localVisionReady && (mode === "offline" || visionReady !== true) && <div className="offline-inline local-vision-inline">
+        <span>{localVisionLoading ? localVisionStatus || "Загружаем локальную модель зрения…" : "Локальный анализ изображений — без отправки фото на сервер."}</span>
+        <button onClick={() => void loadLocalVisionModel()} disabled={busy || localVisionLoading}>{localVisionLoading ? localVisionProgress + "%" : "Загрузить Vision · ~190–270 МБ"}</button>
+        {localVisionLoading && <span>{localVisionProgress}%</span>}
+      </div>}
+      {localVisionReady && <div className="offline-inline local-vision-inline"><span>Локальное зрение готово · фото обрабатываются на устройстве</span><span>WebGPU</span></div>}
       {busy && <div className="task-running"><span className="task-running-dot" /><span><b>QQ AI выполняет задачу</b><small>Можно переключиться на другую вкладку. Не закрывай браузер, пока ответ не готов.</small></span></div>}
       <footer className="composer-area">
         {attachments.length > 0 && <div className="attachment-tray">
@@ -904,17 +1078,17 @@ export default function App() {
             <span title={item.name}>{item.name}</span>
             <button type="button" onClick={() => removeAttachment(item.id)} disabled={busy} aria-label={"Удалить " + item.name}>×</button>
           </div>)}
-          <div className="attachment-note">Файлы отправятся только после нажатия «Отправить». Для видео передаются отдельные кадры, не исходный ролик.</div>
+          <div className="attachment-note">{selectVisionBackend(mode, visionReady === true, localVisionReady) === "cloud" ? "Файлы отправятся в облачный Vision только после нажатия «Отправить». Для видео передаются выбранные кадры, не исходный ролик." : "Фото и выбранные видеокадры останутся на этом устройстве. Исходное видео и его звук не отправляются."}</div>
         </div>}
         <div className="composer">
           <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm" multiple hidden onChange={handleFileSelection} />
-          <button className="attach-button" type="button" onClick={() => fileInputRef.current?.click()} disabled={busy || mode !== "online" || visionReady !== true} aria-label="Прикрепить фото или видео" title={mode !== "online" ? "Медиа доступно в онлайн-режиме" : visionReady === false ? "Модуль Vision пока не подключён" : visionReady === null ? "Проверяем доступность Vision" : "Прикрепить фото или видео"}>＋</button>
+          <button className="attach-button" type="button" onClick={() => fileInputRef.current?.click()} disabled={busy || !canAttachMedia(mode, visionReady === true, localVisionReady)} aria-label="Прикрепить фото или видео" title={canAttachMedia(mode, visionReady === true, localVisionReady) ? "Прикрепить фото или видео" : "Загрузи локальную модель зрения или дождись облачного Vision"}>＋</button>
           <textarea value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }} placeholder={mode === "online" ? "Спросите о чём угодно…" : offlineReady ? "Сообщение для локальной модели…" : "Можно посчитать пример или загрузить локальную модель"} rows={1} disabled={busy} />
           <button className="search-button" type="button" onClick={() => void searchWeb()} disabled={!draft.trim() || attachments.length > 0 || busy} aria-label="Поиск в интернете" title="Искать запрос в интернете">⌕</button>
           <button className={`voice-button ${listening ? "listening" : ""}`} onClick={() => listening ? stopVoiceRecognition() : setVoiceNoticeOpen(true)} disabled={busy} aria-label={listening ? "Остановить запись" : "Голосовой ввод"} title={listening ? "Остановить запись" : "Голосовой ввод"}>{listening ? "■" : <VoiceIcon />}</button>
           <button className="send-button" onClick={() => void send()} disabled={(!draft.trim() && attachments.length === 0) || busy} aria-label="Отправить"><span>↑</span></button>
         </div>
-        <div className="composer-meta"><span>{status}</span><span className="composer-meta-actions"><button className={`notification-toggle ${notifyOnComplete ? "enabled" : ""}`} onClick={() => void toggleCompletionNotifications()} title="Уведомить, когда задача завершится">{notifyOnComplete ? "Уведомления включены" : "Уведомлять о готовности"}</button><span>{modeLabel} · {mode === "offline" ? "Локальная модель" : onlineModelReady === true ? "QQ AI Online · модель сервера" : onlineModelReady === false ? "QQ AI Online · пока без модели" : capabilitiesUnavailable ? "статус недоступен" : "проверка статуса"}{mode === "online" && attachments.length > 0 && " · вложения будут отправлены онлайн"}{mode === "online" && visionReady === false && " · Vision ещё не подключён"}</span></span></div>
+        <div className="composer-meta"><span>{status}</span><span className="composer-meta-actions"><button className={`notification-toggle ${notifyOnComplete ? "enabled" : ""}`} onClick={() => void toggleCompletionNotifications()} title="Уведомить, когда задача завершится">{notifyOnComplete ? "Уведомления включены" : "Уведомлять о готовности"}</button><span>{modeLabel} · {mode === "offline" ? "Локальная модель" : onlineModelReady === true ? "QQ AI Online · модель сервера" : onlineModelReady === false ? "QQ AI Online · пока без модели" : capabilitiesUnavailable ? "статус недоступен" : "проверка статуса"}{attachments.length > 0 && selectVisionBackend(mode, visionReady === true, localVisionReady) === "local" && " · вложения остаются на устройстве"}{attachments.length > 0 && selectVisionBackend(mode, visionReady === true, localVisionReady) === "cloud" && " · вложения отправятся в облачный Vision"}{mode === "online" && visionReady === false && !localVisionReady && " · Vision ещё не подключён"}</span></span></div>
       </footer>
     </section>
 
