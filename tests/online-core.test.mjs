@@ -635,3 +635,16 @@ test("vision routing prefers cloud only in online mode and permits local fallbac
   assert.equal(canAttachMedia("online", false, true), true);
   assert.equal(canAttachMedia("offline", false, false), false);
 });
+
+test("local video frame selection preserves the full time range", async () => {
+  const { selectLocalVideoFrames } = await import("../src/lib/vision-routing.ts");
+  const frames = Array.from({ length: 8 }, (_, index) => ({ timestampMs: index * 4000, id: index }));
+  const selected = selectLocalVideoFrames(frames, 4);
+  assert.equal(selected.length, 4);
+  assert.equal(selected[0].id, 0);
+  assert.equal(selected.at(-1).id, 7);
+  assert.ok(selected[1].id > selected[0].id);
+  assert.ok(selected[2].id > selected[1].id);
+  assert.ok(selected[3].id > selected[2].id);
+  assert.equal(selectLocalVideoFrames(frames, 1)[0].id, 3);
+});
