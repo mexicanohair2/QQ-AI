@@ -199,3 +199,32 @@ test("search endpoints consume bounded response bodies instead of unbounded resp
   assert.doesNotMatch(chat, /const html = await response\.text\(\)/);
   assert.doesNotMatch(search, /const html = await response\.text\(\)/);
 });
+
+
+test("incoming API request bodies are capped while reading, not after full buffering", async () => {
+  const { readRequestTextLimited } = await import("../src/lib/bounded-response.ts");
+  const declaredTooLarge = new Request("https://qq-ai.test/api/search", {
+    method: "POST",
+    headers: { "content-length": "100" },
+    body: "x",
+  });
+  await assert.rejects(() => readRequestTextLimited(declaredTooLarge, 10), /превышает допустимый размер/);
+
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode("123456"));
+      controller.enqueue(new TextEncoder().encode("789012"));
+      controller.close();
+    },
+  });
+  const streamedRequest = new Request("https://qq-ai.test/api/chat", { method: "POST", body, duplex: "half" });
+  await assert.rejects(() => readRequestTextLimited(streamedRequest, 10), /превышает допустимый размер/);
+});
+
+test("chat, search and vision routes no longer buffer request.text before enforcing limits", async () => {
+  for (const path of ["../api/chat.ts", "../api/search.ts", "../api/vision.ts"]) {
+    const source = await readFile(new URL(path, import.meta.url), "utf8");
+    assert.match(source, /readRequestTextLimited\(request,/);
+    assert.doesNotMatch(source, /await request\.text\(\)/);
+  }
+});
