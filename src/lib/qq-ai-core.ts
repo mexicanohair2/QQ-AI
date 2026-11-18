@@ -232,8 +232,10 @@ export function buildSearchOnlyAnswer(sources: QQSearchSource[]): string {
   ];
   sources.forEach((source, index) => {
     lines.push((index + 1) + ". **[" + escapeMarkdownLabel(source.title) + "](<" + source.url + ">)**");
-    lines.push(source.excerpt || "Поисковый фрагмент недоступен.");
-    lines.push("Источник: " + source.domain);
+    lines.push(source.excerpt
+      ? escapeMarkdownLabel(source.excerpt)
+      : "Поисковый фрагмент недоступен.");
+    lines.push("Источник: " + escapeMarkdownLabel(source.domain));
     lines.push("");
   });
   lines.push("_Это предварительные фрагменты поисковой выдачи; для проверки деталей открой первоисточник._");
