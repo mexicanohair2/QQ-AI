@@ -717,6 +717,7 @@ test("local speech recording is browser-only, bounded and editable before sendin
   assert.match(worker, /language: "russian"/);
   assert.match(worker, /task: "transcribe"/);
   assert.match(worker, /MAX_SAMPLES = 16_000 \* 20/);
+  assert.match(worker, /samples\.fill\(0\)/);
   assert.match(audio, /SPEECH_SAMPLE_RATE = 16_000/);
   assert.doesNotMatch(worker, /fetch\(/);
 });
