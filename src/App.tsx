@@ -69,6 +69,9 @@ export default function App() {
   const [otpCode, setOtpCode] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
+  const [voiceNoticeOpen, setVoiceNoticeOpen] = useState(false);
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
   const [authMessage, setAuthMessage] = useState("");
   const [memoryEnabled, setMemoryEnabled] = useState(false);
   const [memoryDraft, setMemoryDraft] = useState("");
@@ -270,6 +273,48 @@ export default function App() {
     }
     if (!answer.trim()) throw new Error("Офлайн-модель вернула пустой ответ.");
     return answer;
+  }
+
+  function beginVoiceRecognition() {
+    const Recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!Recognition) {
+      setError("В этом браузере нет распознавания речи. Можно использовать голосовой ввод клавиатуры телефона.");
+      return;
+    }
+    try {
+      const recognition = new Recognition();
+      recognition.lang = "ru-RU";
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.onresult = (event: any) => {
+        let transcript = "";
+        for (let i = event.resultIndex || 0; i < event.results.length; i += 1) {
+          transcript += event.results[i][0]?.transcript || "";
+        }
+        if (transcript.trim()) {
+          setDraft(current => current.trim() ? current.trimEnd() + " " + transcript.trim() : transcript.trim());
+        }
+      };
+      recognition.onerror = (event: any) => {
+        setListening(false);
+        setError(event.error === "not-allowed"
+          ? "Нет доступа к микрофону. Разреши его в настройках браузера."
+          : "Не удалось распознать речь. Попробуй ещё раз или введи текст.");
+      };
+      recognition.onend = () => setListening(false);
+      recognitionRef.current = recognition;
+      setError("");
+      setListening(true);
+      recognition.start();
+    } catch {
+      setListening(false);
+      setError("Не удалось запустить микрофон. Проверь разрешение браузера.");
+    }
+  }
+
+  function stopVoiceRecognition() {
+    try { recognitionRef.current?.stop(); } catch { /* recognition may already be stopped */ }
+    setListening(false);
   }
 
   async function toggleCompletionNotifications() {
@@ -484,11 +529,19 @@ export default function App() {
       <footer className="composer-area">
         <div className="composer">
           <textarea value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }} placeholder={mode === "online" ? "Спросите о чём угодно…" : offlineReady ? "Сообщение для Qwen…" : "Можно посчитать пример или загрузить Qwen"} rows={1} disabled={busy} />
+          <button className={`voice-button ${listening ? "listening" : ""}`} onClick={() => listening ? stopVoiceRecognition() : setVoiceNoticeOpen(true)} disabled={busy} aria-label={listening ? "Остановить запись" : "Голосовой ввод"} title={listening ? "Остановить запись" : "Голосовой ввод"}>{listening ? "■" : "🎙"}</button>
           <button className="send-button" onClick={() => void send()} disabled={!draft.trim() || busy} aria-label="Отправить"><span>↑</span></button>
         </div>
         <div className="composer-meta"><span>{status}</span><span className="composer-meta-actions"><button className={`notification-toggle ${notifyOnComplete ? "enabled" : ""}`} onClick={() => void toggleCompletionNotifications()} title="Уведомить, когда задача завершится">{notifyOnComplete ? "Уведомления включены" : "Уведомлять о готовности"}</button><span>{modeLabel} · {mode === "offline" ? "Qwen 0.5B" : "Cerebras GLM 4.7 · облачная модель"}</span></span></div>
       </footer>
     </section>
+
+    {voiceNoticeOpen && <div className="modal-backdrop" onClick={() => setVoiceNoticeOpen(false)}><section className="modal" onClick={e => e.stopPropagation()}>
+      <button className="modal-close" onClick={() => setVoiceNoticeOpen(false)}>×</button><div className="modal-symbol">🎙</div><h2>Голосовой ввод</h2>
+      <p>Браузер распознает речь и вставит расшифровку в поле сообщения. В зависимости от браузера аудио может обрабатываться его удалённым сервисом распознавания. Текст можно проверить и изменить до отправки QQ AI.</p>
+      <button className="primary full" onClick={() => { setVoiceNoticeOpen(false); beginVoiceRecognition(); }}>Продолжить</button>
+      <button className="secondary-button full" style={{marginTop:8}} onClick={() => setVoiceNoticeOpen(false)}>Отмена</button>
+    </section></div>}
 
     {authOpen && <div className="modal-backdrop" onClick={() => setAuthOpen(false)}><section className="modal" onClick={e => e.stopPropagation()}>
       <button className="modal-close" onClick={() => setAuthOpen(false)}>×</button><div className="modal-symbol">QQ</div><h2>{session ? "Аккаунт QQ AI" : "Синхронизация с облаком"}</h2>
