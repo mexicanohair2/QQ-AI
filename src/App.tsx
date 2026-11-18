@@ -483,8 +483,8 @@ export default function App() {
       {busy && <div className="task-running"><span className="task-running-dot" /><span><b>QQ AI выполняет задачу</b><small>Можно переключиться на другую вкладку. Не закрывай браузер, пока ответ не готов.</small></span></div>}
       <footer className="composer-area">
         <div className="composer">
-          <textarea value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }} placeholder={mode === "online" ? "Спросите о чём угодно…" : offlineReady ? "Сообщение для локальной модели…" : "Сначала подготовьте офлайн-модель"} rows={1} disabled={busy || (mode === "offline" && !offlineReady)} />
-          <button className="send-button" onClick={() => void send()} disabled={!draft.trim() || busy || (mode === "offline" && !offlineReady)} aria-label="Отправить"><span>↑</span></button>
+          <textarea value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }} placeholder={mode === "online" ? "Спросите о чём угодно…" : offlineReady ? "Сообщение для Qwen…" : "Можно посчитать пример или загрузить Qwen"} rows={1} disabled={busy} />
+          <button className="send-button" onClick={() => void send()} disabled={!draft.trim() || busy} aria-label="Отправить"><span>↑</span></button>
         </div>
         <div className="composer-meta"><span>{status}</span><span className="composer-meta-actions"><button className={`notification-toggle ${notifyOnComplete ? "enabled" : ""}`} onClick={() => void toggleCompletionNotifications()} title="Уведомить, когда задача завершится">{notifyOnComplete ? "Уведомления включены" : "Уведомлять о готовности"}</button><span>{modeLabel} · {mode === "offline" ? "Qwen 0.5B" : "Cerebras GLM 4.7 · облачная модель"}</span></span></div>
       </footer>
