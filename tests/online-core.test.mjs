@@ -345,3 +345,25 @@ test("online mode falls back to the local model when cloud inference is unconfig
   assert.match(app, /Онлайн-модель недоступна\. Переключаюсь на локальную/);
   assert.match(app, /Облачная модель QQ AI ещё не подключена/);
 });
+
+
+test("merges independent search results fairly and removes duplicate or unsafe URLs", async () => {
+  const { mergeSearchResults } = await import("../src/lib/qq-ai-core.ts");
+  const source = (title, url, domain) => ({
+    title, url, domain, retrievedAt: "2026-11-18T12:00:00.000Z", excerpt: title + " snippet",
+  });
+  const merged = mergeSearchResults([
+    [
+      source("DDG first", "https://one.example/page#top", "one.example"),
+      source("DDG second", "https://two.example/page", "two.example"),
+    ],
+    [
+      source("Bing duplicate", "https://one.example/page", "wrong.example"),
+      source("Bing second", "https://three.example/page", "three.example"),
+    ],
+  ], 8);
+  assert.deepEqual(merged.map(item => item.title), ["DDG first", "Bing second", "DDG second"]);
+  assert.equal(merged[0].domain, "one.example");
+  assert.equal(merged.length, 3);
+  assert.equal(mergeSearchResults([[source("Unsafe", "http://unsafe.example", "unsafe.example")]]).length, 0);
+});
