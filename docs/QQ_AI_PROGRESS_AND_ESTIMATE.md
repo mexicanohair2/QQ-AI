@@ -1,6 +1,6 @@
 # QQ AI — progress and realistic delivery estimate
 
-Last verified: 2026-11-18 (branch head `9397b40f565250c1edfc5f42c01c6dab5d58568f`). This document describes the feature branch preview, not a production release.
+Last verified: 2026-11-18 (application code commit `a7f5e96d120dc0c9a59675f5efa00d6f82d161f2`; later commits only updated CI reporting and documentation). This document describes the feature branch preview, not a production release.
 
 ## Verified now
 
