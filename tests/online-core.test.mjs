@@ -722,3 +722,19 @@ test("local speech recording is browser-only, bounded and editable before sendin
   assert.match(audio, /SPEECH_SAMPLE_RATE = 16_000/);
   assert.doesNotMatch(worker, /fetch\(/);
 });
+
+test("local GPU runtime selection keeps at most one heavyweight model active", async () => {
+  const { getOtherLocalRuntimes } = await import("../src/lib/local-runtime.ts");
+  assert.deepEqual(getOtherLocalRuntimes("text"), ["vision", "speech"]);
+  assert.deepEqual(getOtherLocalRuntimes("vision"), ["text", "speech"]);
+  assert.deepEqual(getOtherLocalRuntimes("speech"), ["text", "vision"]);
+
+  const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
+  assert.match(app, /async function prepareLocalRuntime\(target: LocalRuntime\)/);
+  assert.match(app, /await previousEngine\.unload\(\)/);
+  assert.match(app, /localVisionWorkerRef\.current\?\.terminate\(\)/);
+  assert.match(app, /localSpeechWorkerRef\.current\?\.terminate\(\)/);
+  assert.match(app, /await prepareLocalRuntime\("text"\)/);
+  assert.match(app, /await prepareLocalRuntime\("vision"\)/);
+  assert.match(app, /await prepareLocalRuntime\("speech"\)/);
+});
