@@ -1,6 +1,7 @@
 import { readRequestTextLimited, readResponseTextLimited } from "../src/lib/bounded-response";
 import {
   buildSearchOnlyAnswer,
+  parseBingResults,
   parseDuckDuckGoResults,
 } from "../src/lib/qq-ai-core";
 
@@ -28,8 +29,6 @@ export default async function handler(request: Request): Promise<Response> {
     }
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12_000);
   try {
     let raw: string;
     try { raw = await readRequestTextLimited(request, 2_000); }
@@ -42,38 +41,72 @@ export default async function handler(request: Request): Promise<Response> {
       return json({ error: "Введи поисковый запрос длиной до 300 символов." }, 400);
     }
 
-    const response = await fetch(
-      "https://html.duckduckgo.com/html/?q=" + encodeURIComponent(body.query.trim()),
+    const encodedQuery = encodeURIComponent(body.query.trim());
+    const providers = [
       {
-        headers: {
-          "Accept": "text/html",
-          "User-Agent": "Mozilla/5.0 (compatible; QQAI/1.0; +https://github.com/mexicanohair2/QQ-AI)",
-        },
-        signal: controller.signal,
+        name: "DuckDuckGo",
+        url: "https://html.duckduckgo.com/html/?q=" + encodedQuery,
+        parse: parseDuckDuckGoResults,
       },
-    );
-    if (!response.ok) return json({ error: "Поисковая система временно недоступна." }, 502);
-    let html: string;
-    try {
-      html = await readResponseTextLimited(response, 2_500_000);
-    } catch {
-      return json({ error: "Поисковая выдача слишком большая." }, 502);
+      {
+        name: "Bing",
+        url: "https://www.bing.com/search?q=" + encodedQuery + "&count=10&setlang=ru&cc=NL",
+        parse: parseBingResults,
+      },
+    ];
+
+    const providerFailures: string[] = [];
+    for (const provider of providers) {
+      const providerController = new AbortController();
+      const providerTimeout = setTimeout(() => providerController.abort(), 5_000);
+      try {
+        const response = await fetch(provider.url, {
+          headers: {
+            "Accept": "text/html,application/xhtml+xml",
+            "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.8",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+          },
+          signal: providerController.signal,
+        });
+        if (!response.ok) {
+          providerFailures.push(provider.name + ":" + response.status);
+          continue;
+        }
+
+        let html: string;
+        try {
+          html = await readResponseTextLimited(response, 2_500_000);
+        } catch {
+          providerFailures.push(provider.name + ":body-too-large");
+          continue;
+        }
+
+        const sources = provider.parse(html);
+        if (!sources.length) {
+          providerFailures.push(provider.name + ":no-organic-results");
+          continue;
+        }
+
+        return json({
+          answer: buildSearchOnlyAnswer(sources),
+          sources,
+          provider: provider.name + " HTML search results",
+          synthesizedByModel: false,
+          retrievedAt: new Date().toISOString(),
+        });
+      } catch {
+        providerFailures.push(provider.name + ":network-or-timeout");
+      } finally {
+        clearTimeout(providerTimeout);
+      }
     }
 
-    const sources = parseDuckDuckGoResults(html);
     return json({
-      answer: buildSearchOnlyAnswer(sources),
-      sources,
-      provider: "DuckDuckGo search results",
-      synthesizedByModel: false,
-      retrievedAt: new Date().toISOString(),
-    });
-  } catch (error) {
-    const timedOut = error instanceof Error && error.name === "AbortError";
-    return json({
-      error: timedOut ? "Поиск превысил допустимое время ожидания." : "Не удалось выполнить поиск QQ AI.",
-    }, timedOut ? 504 : 502);
-  } finally {
-    clearTimeout(timeout);
+      error: "Поисковые системы не вернули доступную выдачу. Попробуй повторить запрос позже.",
+      code: "SEARCH_PROVIDERS_UNAVAILABLE",
+      providersAttempted: providers.length,
+    }, 502);
+  } catch {
+    return json({ error: "Не удалось выполнить поиск QQ AI." }, 502);
   }
 }
