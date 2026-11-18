@@ -81,6 +81,7 @@ export default function App() {
   const [localSpeechProgress, setLocalSpeechProgress] = useState(0);
   const [localSpeechStatus, setLocalSpeechStatus] = useState("");
   const [localSpeechRecording, setLocalSpeechRecording] = useState(false);
+  const [localSpeechTranscribing, setLocalSpeechTranscribing] = useState(false);
   const localSpeechWorkerRef = useRef<Worker | null>(null);
   const localSpeechLoadPromiseRef = useRef<{ resolve: () => void; reject: (error: Error) => void } | null>(null);
   const localSpeechRequestRef = useRef<{ id: string; resolve: (text: string) => void; reject: (error: Error) => void } | null>(null);
@@ -921,7 +922,12 @@ export default function App() {
       throw new Error("Этот браузер не умеет декодировать запись микрофона для локальной расшифровки.");
     }
 
-    const context = new AudioContextConstructor({ sampleRate: SPEECH_SAMPLE_RATE });
+    let context: AudioContext;
+    try {
+      context = new AudioContextConstructor({ sampleRate: SPEECH_SAMPLE_RATE });
+    } catch {
+      context = new AudioContextConstructor();
+    }
     try {
       const decoded = await context.decodeAudioData(await blob.arrayBuffer());
       const channels = Array.from(
@@ -940,7 +946,7 @@ export default function App() {
       setError("Сначала загрузи локальную модель распознавания речи.");
       return;
     }
-    if (localSpeechRecording) return;
+    if (localSpeechRecording || localSpeechTranscribing) return;
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
       setError("Этот браузер не поддерживает локальную запись микрофона.");
       return;
@@ -974,6 +980,8 @@ export default function App() {
       recorder.onerror = () => {
         setLocalSpeechRecording(false);
         setListening(false);
+        try { stream.getTracks().forEach(track => track.stop()); } catch { /* Stream may already be closed. */ }
+        localSpeechStreamRef.current = null;
         setError("Не удалось записать звук. Повтори попытку.");
       };
       recorder.onstop = async () => {
@@ -986,6 +994,7 @@ export default function App() {
         if (localSpeechStreamRef.current === stream) localSpeechStreamRef.current = null;
         setLocalSpeechRecording(false);
         setListening(false);
+        setLocalSpeechTranscribing(true);
 
         const blob = new Blob(localSpeechChunksRef.current, { type: recorder.mimeType || preferredMime || "audio/webm" });
         localSpeechChunksRef.current = [];
@@ -1000,6 +1009,8 @@ export default function App() {
           const message = failure instanceof Error ? failure.message : "Не удалось распознать речь.";
           setLocalSpeechStatus("Локальная расшифровка не выполнена");
           setError(message);
+        } finally {
+          setLocalSpeechTranscribing(false);
         }
       };
 
@@ -1037,7 +1048,11 @@ export default function App() {
     if (localSpeechStopTimerRef.current !== null) window.clearTimeout(localSpeechStopTimerRef.current);
     try {
       const recorder = localSpeechRecorderRef.current;
-      if (recorder && recorder.state !== "inactive") recorder.stop();
+      if (recorder && recorder.state !== "inactive") {
+        recorder.onstop = null;
+        recorder.onerror = null;
+        recorder.stop();
+      }
     } catch { /* Recorder may already be stopping. */ }
     localSpeechStreamRef.current?.getTracks().forEach(track => track.stop());
     localSpeechLoadPromiseRef.current?.reject(new Error("Окно QQ AI закрыто."));
@@ -1388,14 +1403,15 @@ export default function App() {
     </section>
 
     {voiceNoticeOpen && <div className="modal-backdrop" onClick={() => { if (!localSpeechRecording) setVoiceNoticeOpen(false); }}><section className="modal" onClick={e => e.stopPropagation()}>
-      <button className="modal-close" onClick={() => { if (!localSpeechRecording) setVoiceNoticeOpen(false); }} disabled={localSpeechRecording}>×</button><div className="modal-symbol"><VoiceIcon /></div><h2>Голосовой ввод</h2>
+      <button className="modal-close" onClick={() => { if (!localSpeechRecording && !localSpeechTranscribing) setVoiceNoticeOpen(false); }} disabled={localSpeechRecording || localSpeechTranscribing}>×</button><div className="modal-symbol"><VoiceIcon /></div><h2>Голосовой ввод</h2>
       <p>Можно использовать распознавание браузера: в зависимости от него звук может обрабатываться внешним сервисом. Локальный вариант скачивает мультиязычную Whisper Tiny и обрабатывает запись на устройстве; аудио не отправляется и не сохраняется. Расшифровка появится в поле сообщения — проверь её перед отправкой.</p>
       {!localSpeechReady && <button className="secondary-button full" onClick={() => void loadLocalSpeechModel()} disabled={localSpeechLoading || busy}>
         {localSpeechLoading ? "Загружаем модель · " + localSpeechProgress + "%" : "Загрузить локальную модель · ~75 МБ"}
       </button>}
       {localSpeechLoading && <small>{localSpeechStatus || "Скачивание и подготовка…"}</small>}
-      {localSpeechReady && !localSpeechRecording && <button className="secondary-button full" onClick={() => void startLocalSpeechRecording()} disabled={busy}>Записать локально</button>}
+      {localSpeechReady && !localSpeechRecording && !localSpeechTranscribing && <button className="secondary-button full" onClick={() => void startLocalSpeechRecording()} disabled={busy}>Записать локально</button>}
       {localSpeechRecording && <button className="primary full" onClick={stopLocalSpeechRecording}>Остановить и распознать</button>}
+      {localSpeechTranscribing && <small>Распознаём запись на устройстве…</small>}
       {localSpeechStatus && <small>{localSpeechStatus}</small>}
       <button className="primary full" style={{marginTop:8}} onClick={() => { setVoiceNoticeOpen(false); beginVoiceRecognition(); }} disabled={localSpeechRecording}>Продолжить через браузер</button>
       <button className="secondary-button full" style={{marginTop:8}} onClick={() => setVoiceNoticeOpen(false)} disabled={localSpeechRecording}>Отмена</button>
