@@ -1,6 +1,6 @@
 # QQ AI — progress and realistic delivery estimate
 
-Last verified: 2026-11-18 (latest preview build commit `688747364cf6e2e6019a1a4ef26fae4a1bca0524`). This document describes the feature-branch preview, not a production release.
+Last verified: 2026-11-18 (latest preview build commit `9f928a261617deade7e7ac8c69cd684fa6276aab`). This document describes the feature-branch preview, not a production release.
 
 ## Verified now
 
@@ -172,3 +172,15 @@ A useful first online release is therefore measured in **weeks**, not hours. A s
 - Нужно запустить полный набор тестов на точном commit, затем проверить preview: root, capabilities, реальный POST-поиск, текстовый маршрут, Qwen load/generation, upload и отмену медиа.
 - Не выполнено физическое тестирование на Honor 400.
 - PR остаётся draft; production deploy и интеграция в QQCross не выполнялись.
+
+
+## Обновление 18 ноября 2026 — защита локальной истории и блокировка недоступного Vision
+
+- Добавлен `src/lib/chat-storage.ts`: восстановление истории из localStorage теперь проверяет роли, тип и длину сообщений, фильтрует некорректные вложения и ограничивает восстановленную историю 40 последними сообщениями. Ошибки и повреждённый JSON не ломают запуск приложения.
+- Загрузка фото/видео заблокирована, пока capability API не подтвердит, что Vision-модель действительно настроена. Это предотвращает бессмысленную отправку файлов в заведомо неработающий модуль; проверка также повторяется в `sendVision`.
+- Добавлены регрессионные тесты для повреждённой истории и состояния Vision.
+- Последний preview: `dpl_5RVYSzetbB5YwUP8LVTJxR9BLgPo`, READY, commit `9f928a261617deade7e7ac8c69cd684fa6276aab`.
+- Vercel выполнил `tsc -b && vite build`; сборка завершилась успешно. Отдельные Node-тесты этим deployment не запускались.
+- Полный npm install audit продолжает сообщать о четырёх high findings; подробный отчёт не получен. Не устранять это слепым `npm audit fix --force`.
+- QQ Online и Vision всё ещё не имеют настроенных inference endpoints; текущий preview не является завершённым мультимодальным ИИ.
+- Не проверены ручные сценарии браузера, WebGPU/загрузка Qwen и фактическая работа на Honor 400.
