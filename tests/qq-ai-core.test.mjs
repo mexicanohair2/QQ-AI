@@ -55,7 +55,7 @@ test("search context treats snippets as untrusted evidence and builds source lin
   const context = buildSearchContext(sources);
   assert.match(context, /НЕДОВЕРЕННЫЕ ДАННЫЕ/);
   assert.match(context, /https:\/\/docs\.example\.com/);
-  assert.match(buildSearchOnlyAnswer(sources), /\[Документация\]\(https:\/\/docs\.example\.com\/\)/);
+  assert.match(buildSearchOnlyAnswer(sources), /\[Документация\]\(<https:\/\/docs\.example\.com\/>\)/);
 });
 
 test("accepts only bounded base64 image data URLs", () => {
