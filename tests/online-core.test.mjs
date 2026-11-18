@@ -289,11 +289,24 @@ test("chat history storage filters malformed records and bounds restored message
   assert.deepEqual(single[0].attachments, [{ name: "photo.jpg", kind: "image" }]);
 });
 
-test("image and video attachment controls stay disabled until a vision model is configured", async () => {
+test("image and video attachments use a configured cloud or explicitly loaded local vision model", async () => {
   const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
-  assert.match(app, /if \(visionReady !== true\)/);
-  assert.match(app, /disabled=\{busy \|\| mode !== "online" \|\| visionReady !== true\}/);
-  assert.match(app, /async function sendVision[\s\S]*?if \(visionReady !== true\)/);
+  const worker = await readFile(new URL("../src/workers/local-vision.worker.ts", import.meta.url), "utf8");
+  const routing = await import("../src/lib/vision-routing.ts");
+
+  assert.match(app, /canAttachMedia\(mode, visionReady === true, localVisionReady\)/);
+  assert.match(app, /selectVisionBackend\(mode, visionReady === true, localVisionReady\)/);
+  assert.match(app, /new Worker\(new URL\("\.\/workers\/local-vision\.worker\.ts", import\.meta\.url\)/);
+  assert.match(app, /async function loadLocalVisionModel\(\)/);
+  assert.match(app, /analyzeWithLocalVision\(question, localItems\)/);
+  assert.match(app, /fetch\("\/api\/vision"/);
+  assert.match(app, /Фото и выбранные видеокадры останутся на этом устройстве/);
+  assert.match(worker, /device: "webgpu"/);
+  assert.match(worker, /HuggingFaceTB\/SmolVLM-256M-Instruct/);
+  assert.equal(routing.selectVisionBackend("online", true, true), "cloud");
+  assert.equal(routing.selectVisionBackend("online", false, true), "local");
+  assert.equal(routing.selectVisionBackend("offline", true, true), "local");
+  assert.equal(routing.selectVisionBackend("offline", false, false), "unavailable");
 });
 
 
