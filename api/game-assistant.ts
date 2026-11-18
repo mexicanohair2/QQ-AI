@@ -2,10 +2,28 @@ import { buildGameAiMessages, parseGameAiResult, validateGameAiRequest } from ".
 
 export const config = { runtime: "edge" };
 
-const json = (body: unknown, status = 200) =>
+function corsHeaders(request: Request): HeadersInit | null {
+  const origin = request.headers.get("origin");
+  if (!origin || origin === new URL(request.url).origin) return {};
+  const allowed = (process.env.QQCROSS_ALLOWED_ORIGIN || "").split(",").map((item) => item.trim()).filter(Boolean);
+  if (!allowed.includes(origin)) return null;
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type",
+    "Access-Control-Max-Age": "600",
+    "Vary": "Origin",
+  };
+}
+
+const json = (body: unknown, status = 200, extraHeaders: HeadersInit = {}) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" },
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+      ...extraHeaders,
+    },
   });
 
 async function authenticate(request: Request): Promise<boolean> {
@@ -31,17 +49,20 @@ async function authenticate(request: Request): Promise<boolean> {
 }
 
 export default async function handler(request: Request): Promise<Response> {
-  if (request.method !== "POST") return json({ error: "Метод не поддерживается." }, 405);
+  const cors = corsHeaders(request);
+  if (cors === null) return json({ error: "Этот источник не разрешён для игрового ИИ." }, 403);
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
+  if (request.method !== "POST") return json({ error: "Метод не поддерживается." }, 405, cors);
   const apiKey = process.env.CEREBRAS_API_KEY?.trim();
-  if (!apiKey) return json({ error: "Игровой ИИ пока не подключён: серверный провайдер не настроен." }, 503);
+  if (!apiKey) return json({ error: "Игровой ИИ пока не подключён: серверный провайдер не настроен." }, 503, cors);
 
-  if (!(await authenticate(request))) return json({ error: "Для игрового ИИ нужен действующий вход QQCross/QQ AI." }, 401);
+  if (!(await authenticate(request))) return json({ error: "Для игрового ИИ нужен действующий вход QQCross/QQ AI." }, 401, cors);
 
   try {
     const rawBody = await request.text();
-    if (rawBody.length > 12_000) return json({ error: "Запрос слишком большой." }, 413);
+    if (rawBody.length > 12_000) return json({ error: "Запрос слишком большой." }, 413, cors);
     const body = JSON.parse(rawBody) as { request?: unknown };
-    if (!validateGameAiRequest(body?.request)) return json({ error: "Некорректный запрос игрового ИИ." }, 400);
+    if (!validateGameAiRequest(body?.request)) return json({ error: "Некорректный запрос игрового ИИ." }, 400, cors);
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 25_000);
@@ -61,13 +82,13 @@ export default async function handler(request: Request): Promise<Response> {
       });
       if (!upstream.ok) {
         const status = upstream.status === 429 ? 429 : upstream.status >= 500 ? 502 : 503;
-        return json({ error: "Провайдер игрового ИИ временно не смог обработать запрос." }, status);
+        return json({ error: "Провайдер игрового ИИ временно не смог обработать запрос." }, status, cors);
       }
       const payload = await upstream.json() as { choices?: Array<{ message?: { content?: string } }> };
       const content = payload.choices?.[0]?.message?.content;
-      if (typeof content !== "string" || !content.trim()) return json({ error: "Игровой ИИ вернул пустой ответ." }, 502);
+      if (typeof content !== "string" || !content.trim()) return json({ error: "Игровой ИИ вернул пустой ответ." }, 502, cors);
       const result = parseGameAiResult(content, body.request);
-      return json({ result });
+      return json({ result }, 200, cors);
     } finally {
       clearTimeout(timeout);
     }
@@ -80,6 +101,6 @@ export default async function handler(request: Request): Promise<Response> {
       message === "Вопрос содержит ответ и был отклонён." ||
       message === "Подсказка раскрывает ответ и была отклонена."
       ? message
-      : "Не удалось выполнить запрос игрового ИИ." }, 502);
+      : "Не удалось выполнить запрос игрового ИИ." }, 502, cors);
   }
 }
