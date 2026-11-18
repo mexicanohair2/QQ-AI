@@ -310,7 +310,6 @@ test("image and video attachments use a configured cloud or explicitly loaded lo
   assert.match(app, /fetch\("\/api\/vision"/);
   assert.match(app, /Фото и выбранные видеокадры останутся на этом устройстве/);
   assert.match(worker, /device: "webgpu"/);
-  assert.match(worker, /dtype: "q8"/);
   assert.match(worker, /HuggingFaceTB\/SmolVLM-256M-Instruct/);
   assert.equal(routing.selectVisionBackend("online", true, true), "cloud");
   assert.equal(routing.selectVisionBackend("online", false, true), "local");
@@ -715,6 +714,7 @@ test("local speech recording is browser-only, bounded and editable before sendin
   assert.match(app, /Загрузить локальную модель · ~70–90 МБ/);
   assert.match(worker, /onnx-community\/whisper-tiny/);
   assert.match(worker, /device: "webgpu"/);
+  assert.match(worker, /dtype: "q8"/);
   assert.match(worker, /language: "russian"/);
   assert.match(worker, /task: "transcribe"/);
   assert.match(worker, /MAX_SAMPLES = 16_000 \* 20/);
