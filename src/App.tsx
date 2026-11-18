@@ -10,7 +10,7 @@ import { dataUrlToBase64, prepareImage, sampleVideoFrames } from "./lib/media";
 import { buildSearchContext, shouldSearchWeb, type QQSearchSource } from "./lib/qq-ai-core";
 import { readOpenAIChatStream } from "./lib/openai-stream";
 import { readChatMessages, type ChatMessage } from "./lib/chat-storage";
-import { buildMemoryInstruction, normalizeMemoryEntries, readStoredMemories, persistStoredMemories, MAX_MEMORY_CHARS } from "./lib/user-memory";
+import { buildMemoryInstruction, normalizeMemoryEntries, readStoredMemories, persistStoredMemories, readStoredMemoryEnabled, persistStoredMemoryEnabled, MAX_MEMORY_CHARS } from "./lib/user-memory";
 
 type Message = ChatMessage;
 type MediaAttachment = { id: string; file: File; name: string; kind: "image" | "video"; previewUrl: string };
@@ -83,7 +83,7 @@ export default function App() {
   const speechRunRef = useRef(0);
   const recognitionRef = useRef<any>(null);
   const [authMessage, setAuthMessage] = useState("");
-  const [memoryEnabled, setMemoryEnabled] = useState(false);
+  const [memoryEnabled, setMemoryEnabled] = useState(() => readStoredMemoryEnabled());
   const [memoryDraft, setMemoryDraft] = useState("");
   const [memories, setMemories] = useState<string[]>(() => readStoredMemories());
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -130,7 +130,8 @@ export default function App() {
 
   useEffect(() => {
     persistStoredMemories(memories);
-  }, [memories]);
+    persistStoredMemoryEnabled(memoryEnabled);
+  }, [memories, memoryEnabled]);
 
   useEffect(() => {
     try {
@@ -172,8 +173,6 @@ export default function App() {
     if (!supabase || !session?.user) {
       setCloudLoaded(false);
       setCloudStatus("Только на этом устройстве");
-      setMemoryEnabled(false);
-      setMemories([]);
       return;
     }
     let alive = true;
@@ -191,12 +190,32 @@ export default function App() {
           setThreadId(threadResult.data.id);
         }
       }
-      if (prefsResult.data) {
-        setMemoryEnabled(Boolean(prefsResult.data.memory_enabled));
-        setMemories(normalizeMemoryEntries([...readStoredMemories(), ...prefsResult.data.learned_preferences]));
-      }
+      const localMemories = readStoredMemories();
+      const cloudMemories = normalizeMemoryEntries(prefsResult.data?.learned_preferences);
+      const mergedMemories = normalizeMemoryEntries([...localMemories, ...cloudMemories]);
+      const memoryEnabledValue = prefsResult.data
+        ? Boolean(prefsResult.data.memory_enabled)
+        : readStoredMemoryEnabled();
+      setMemoryEnabled(memoryEnabledValue);
+      setMemories(mergedMemories);
+
       setCloudStatus("Облако подключено");
-      if (threadResult.error || prefsResult.error) setCloudStatus("Облако подключено частично");
+      if (threadResult.error || prefsResult.error) {
+        setCloudStatus("Облако подключено частично");
+      } else if (localMemories.length > 0 || memoryEnabledValue) {
+        const cloudNeedsUpdate = !prefsResult.data ||
+          JSON.stringify(mergedMemories) !== JSON.stringify(cloudMemories) ||
+          memoryEnabledValue !== Boolean(prefsResult.data.memory_enabled);
+        if (cloudNeedsUpdate) {
+          const { error: syncMemoryError } = await supabase.from("qq_ai_preferences").upsert({
+            user_id: session.user.id,
+            memory_enabled: memoryEnabledValue,
+            learned_preferences: mergedMemories,
+            updated_at: new Date().toISOString(),
+          });
+          if (syncMemoryError) setCloudStatus("Облако подключено частично");
+        }
+      }
       setCloudLoaded(true);
     }).catch(() => { setCloudStatus("Не удалось подключить облако"); setCloudLoaded(true); });
     return () => { alive = false; };
