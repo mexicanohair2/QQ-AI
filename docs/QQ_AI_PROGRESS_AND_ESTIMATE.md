@@ -1,6 +1,6 @@
 # QQ AI — progress and realistic delivery estimate
 
-Last verified: 2026-11-18 (application code commit `a7f5e96d120dc0c9a59675f5efa00d6f82d161f2`; later commits only updated CI reporting and documentation). This document describes the feature branch preview, not a production release.
+Last verified: 2026-11-18 (application and verification commit `ceb8f3cab5b23dae0efc9bc9c370b78c7b5acdf7`). This document describes the feature-branch preview, not a production release.
 
 ## Verified now
 
@@ -110,3 +110,32 @@ A useful first online release is therefore measured in **weeks**, not hours. A s
 - Vercel содержит `VITE_SUPABASE_URL` и `VITE_SUPABASE_PUBLISHABLE_KEY` для preview/production/development; значения ключей не включены в этот отчёт.
 - Supabase Security Advisor сообщает, что защита от скомпрометированных паролей отключена. QQ AI использует OTP-вход по email, а не парольный вход; настройка остаётся отдельным пунктом проверки.
 - Сам факт наличия RLS и env-переменных не подтверждает реальную доставку OTP-писем. Фактический вход с тестовым почтовым адресом и синхронизация на двух устройствах пока не проверены.
+
+
+## Обновление 18 ноября 2026 — ограничения тел запросов и актуальная сборка
+
+### Изменения
+
+- Добавлен модуль src/lib/bounded-response.ts: чтение входящего и внешнего HTTP-тела ограничивается по фактическим байтам во время потокового чтения; Content-Length проверяется заранее, но не считается единственной защитой.
+- Ограничение применяется к POST /api/chat (520 КБ), POST /api/search (2 КБ), POST /api/vision (4,3 МБ) и поисковой выдаче DuckDuckGo (2,5 МБ).
+- Внешняя выдача больше не считывается целиком до проверки её размера. При превышении лимита чтение отменяется.
+- Добавлены тесты на завышенный Content-Length, превышение лимита уже во время чтения, корректное сохранение UTF-8 при разделении символов между чанками и использование ограниченного чтения всеми тремя API-маршрутами.
+- Потоковый парсер src/lib/openai-stream.ts покрыт тестами для фрагментированного SSE, CRLF, последнего события без завершающего разделителя, совместимого обычного JSON-ответа, пустого и слишком большого ответа.
+- Таймер онлайн-маршрута остаётся активным в течение чтения потока и снимается после завершения либо отмены downstream-потока.
+
+### Точная проверка последней версии
+
+- Коммит: ceb8f3cab5b23dae0efc9bc9c370b78c7b5acdf7.
+- GitHub Actions run 44297262571: SUCCESS. Успешно завершены dependency audit steps, benchmark syntax, training-data validator, Game AI tests, online-core tests, TypeScript check и production build.
+- Полный npm audit: четыре high в dev/build-цепочке vite → fdir/tinyglobby/picomatch; runtime audit через npm audit --omit=dev: ноль уязвимостей. Проблема dev-цепочки не скрыта и остаётся открытым пунктом обновления зависимостей.
+- Vercel preview deployment dpl_39PE9KGpHpVPtXtpi1u2imTMTAE2 — READY, соответствует указанному коммиту: https://qq-ai-preview-qp308m7u7-mexicanohaie.vercel.app
+- Главная страница проверена через Vercel preview fetch: HTTP 200.
+- /api/capabilities проверен через Vercel preview fetch: HTTP 200. Реальный статус: QQ Online — unconfigured; QQ Search — available через поисковые сниппеты; image/video understanding — unconfigured; Qwen Offline — available при поддержке WebGPU и достаточных ресурсах устройства.
+
+### Что проверено и что ещё нет
+
+- Проверки CI подтверждают тесты контракта, статическую типизацию и production build.
+- Проверка главной страницы и capabilities не доказывает, что POST-поиск реально получил ответ от DuckDuckGo; live POST-сценарий остаётся отдельной ручной проверкой.
+- Qwen ID сверён с официальным каталогом WebLLM; оценка VRAM в каталоге — около 945 МБ. Реальная загрузка и генерация на Honor 400 не тестировались.
+- Онлайн-генерация, реальный vision и аудиоанализ видео по-прежнему не работают до размещения подходящих весов и inference endpoint.
+- PR #1 остаётся draft; merge, production deploy, изменения QQCross и APK не выполнялись.
