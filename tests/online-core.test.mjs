@@ -530,3 +530,20 @@ test("search route rejects a non-web origin even when its host matches", async (
     globalThis.fetch = originalFetch;
   }
 });
+
+test("saved preferences persist locally and recover safely from corrupt storage", async () => {
+  const { readStoredMemories, persistStoredMemories, MEMORY_STORAGE_KEY } = await import("../src/lib/user-memory.ts");
+  const values = new Map();
+  const storage = {
+    getItem(key) { return values.has(key) ? values.get(key) : null; },
+    setItem(key, value) { values.set(key, value); },
+  };
+  assert.equal(persistStoredMemories(["Объясняй на примерах"], storage), true);
+  assert.deepEqual(readStoredMemories(storage), ["Объясняй на примерах"]);
+  assert.equal(values.has(MEMORY_STORAGE_KEY), true);
+  values.set(MEMORY_STORAGE_KEY, "{broken");
+  assert.deepEqual(readStoredMemories(storage), []);
+  const unavailable = { getItem() { throw new Error("blocked"); }, setItem() { throw new Error("blocked"); } };
+  assert.deepEqual(readStoredMemories(unavailable), []);
+  assert.equal(persistStoredMemories(["test"], unavailable), false);
+});
