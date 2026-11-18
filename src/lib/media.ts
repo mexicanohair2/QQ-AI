@@ -156,10 +156,10 @@ export async function sampleVideoFrames(file: File): Promise<PreparedVideoFrame[
   video.preload = "metadata";
   video.muted = true;
   video.playsInline = true;
-  video.src = objectUrl;
 
   try {
     const metadataReady = waitForMediaEvent(video, "loadedmetadata", 12000);
+    video.src = objectUrl;
     video.load();
     await metadataReady;
     const duration = video.duration;
