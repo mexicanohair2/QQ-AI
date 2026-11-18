@@ -7,6 +7,7 @@ import "katex/dist/katex.min.css";
 import { createClient, type Session } from "@supabase/supabase-js";
 import { calculateMathQuestion } from "./lib/math";
 import { dataUrlToBase64, prepareImage, sampleVideoFrames } from "./lib/media";
+import { shouldSearchWeb } from "./lib/qq-ai-core";
 
 type Message = { role: "user" | "assistant"; content: string; attachments?: Array<{ name: string; kind: "image" | "video" }> };
 type MediaAttachment = { id: string; file: File; name: string; kind: "image" | "video"; previewUrl: string };
@@ -56,7 +57,7 @@ function remarkAnswerUnderline() {
 export default function App() {
   const [messages, setMessages] = useState<Message[]>(readMessages);
   const [mode, setMode] = useState<Mode>("online");
-  const [status, setStatus] = useState("QQ AI Online · облачный режим");
+  const [status, setStatus] = useState("Проверяем доступность QQ AI Online…");
   const [progress, setProgress] = useState(0);
   const [busy, setBusy] = useState(false);
   const [notifyOnComplete, setNotifyOnComplete] = useState(() => {
@@ -64,6 +65,8 @@ export default function App() {
     catch { return false; }
   });
   const [offlineReady, setOfflineReady] = useState(false);
+  const [onlineModelReady, setOnlineModelReady] = useState<boolean | null>(null);
+  const [visionReady, setVisionReady] = useState<boolean | null>(null);
   const [draft, setDraft] = useState("");
   const [attachments, setAttachments] = useState<MediaAttachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -129,6 +132,21 @@ export default function App() {
     } catch { /* local storage may be unavailable */ }
     bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, threadId]);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/capabilities").then(async response => {
+      if (!response.ok) throw new Error("Статус QQ AI недоступен");
+      return response.json();
+    }).then(data => {
+      if (!alive) return;
+      setOnlineModelReady(data.onlineText?.state === "configured");
+      setVisionReady(data.imageUnderstanding?.state === "configured");
+    }).catch(() => {
+      if (alive) { setOnlineModelReady(false); setVisionReady(false); }
+    });
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => {
     if (!supabase) return;
@@ -224,6 +242,22 @@ export default function App() {
       setError(message + storageHint + " Проверь свободное место и подключение к Wi‑Fi, затем повтори.");
       setStatus("Офлайн-модель не готова");
     } finally { setBusy(false); }
+  }
+
+
+  async function sendSearchFallback(query: string): Promise<string> {
+    setStatus("QQ Search ищет актуальные страницы…");
+    const response = await fetch("/api/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || "QQ Search временно недоступен.");
+    if (typeof result.answer !== "string" || !result.answer.trim()) {
+      throw new Error("QQ Search не вернул результатов.");
+    }
+    return result.answer;
   }
 
   async function sendOnline(history: Message[]) {
@@ -479,8 +513,15 @@ export default function App() {
           await notifyTaskComplete();
           return;
         }
-        if (mode === "online") await sendOnline(next);
-        else await sendOffline(next);
+        if (mode === "online") {
+          try {
+            await sendOnline(next);
+          } catch (onlineError) {
+            if (!shouldSearchWeb(content)) throw onlineError;
+            const searchAnswer = await sendSearchFallback(content);
+            setMessages([...next, { role: "assistant", content: searchAnswer }]);
+          }
+        } else await sendOffline(next);
       }
       setStatus("Задача завершена");
       await notifyTaskComplete();
@@ -617,7 +658,7 @@ export default function App() {
             <button className="primary" onClick={loadOfflineModel} disabled={busy}>{busy ? "Загрузка…" : "Загрузить модель"}</button>
             {busy && <div className="progress"><span style={{ width: progress + "%" }} /></div>}
           </div>}
-          <div className="welcome-foot"><span className="status-pulse" />{mode === "online" ? "Облачный режим · ответы через интернет" : offlineReady ? "Локальная модель готова" : "Офлайн-модель ещё не загружена"}</div>
+          <div className="welcome-foot"><span className="status-pulse" />{mode === "online" ? onlineModelReady === true ? "QQ AI Online · собственная модель подключена" : onlineModelReady === false ? "QQ AI Online · модель ещё не размещена; поиск доступен отдельно" : "Проверяем онлайн-модель…" : offlineReady ? "Локальная модель готова" : "Офлайн-модель ещё не загружена"}</div>
         </div> : <div className="conversation">
           {messages.map((m, i) => <article className={`message ${m.role}`} key={i}>
             <div className="message-avatar">{m.role === "assistant" ? <span>QQ</span> : "Вы"}</div>
@@ -650,7 +691,7 @@ export default function App() {
           <button className={`voice-button ${listening ? "listening" : ""}`} onClick={() => listening ? stopVoiceRecognition() : setVoiceNoticeOpen(true)} disabled={busy} aria-label={listening ? "Остановить запись" : "Голосовой ввод"} title={listening ? "Остановить запись" : "Голосовой ввод"}>{listening ? "■" : "🎙"}</button>
           <button className="send-button" onClick={() => void send()} disabled={(!draft.trim() && attachments.length === 0) || busy} aria-label="Отправить"><span>↑</span></button>
         </div>
-        <div className="composer-meta"><span>{status}</span><span className="composer-meta-actions"><button className={`notification-toggle ${notifyOnComplete ? "enabled" : ""}`} onClick={() => void toggleCompletionNotifications()} title="Уведомить, когда задача завершится">{notifyOnComplete ? "Уведомления включены" : "Уведомлять о готовности"}</button><span>{modeLabel} · {mode === "offline" ? "Qwen 0.5B" : "QQ AI Online · облачная модель"}</span></span></div>
+        <div className="composer-meta"><span>{status}</span><span className="composer-meta-actions"><button className={`notification-toggle ${notifyOnComplete ? "enabled" : ""}`} onClick={() => void toggleCompletionNotifications()} title="Уведомить, когда задача завершится">{notifyOnComplete ? "Уведомления включены" : "Уведомлять о готовности"}</button><span>{modeLabel} · {mode === "offline" ? "Qwen 0.5B" : onlineModelReady === true ? "QQ AI Online · собственная модель" : onlineModelReady === false ? "QQ AI Online · пока без модели" : "проверка статуса"}{mode === "online" && attachments.length > 0 && " · вложения будут отправлены онлайн"}{mode === "online" && visionReady === false && " · Vision ещё не подключён"}</span></span></div>
       </footer>
     </section>
 
