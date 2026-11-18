@@ -83,10 +83,11 @@ export default function App() {
   const speechRunRef = useRef(0);
   const recognitionRef = useRef<any>(null);
   const [authMessage, setAuthMessage] = useState("");
-  const [memoryEnabled, setMemoryEnabled] = useState(() => readStoredMemoryPreference()?.enabled ?? false);
+  const [memoryEnabled, setMemoryEnabled] = useState(() => readStoredMemoryPreference(undefined, session?.user?.id ?? "anonymous")?.enabled ?? false);
   const memoryPersistenceReadyRef = useRef(false);
+  const memoryPersistenceScopeRef = useRef(session?.user?.id ?? "anonymous");
   const [memoryDraft, setMemoryDraft] = useState("");
-  const [memories, setMemories] = useState<string[]>(() => readStoredMemories());
+  const [memories, setMemories] = useState<string[]>(() => readStoredMemories(undefined, session?.user?.id ?? "anonymous"));
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(() => {
     try { return localStorage.getItem("qq-ai-sidebar-hidden") !== "1"; }
@@ -130,13 +131,21 @@ export default function App() {
   }, [sidebarVisible]);
 
   useEffect(() => {
+    const memoryScope = session?.user?.id ?? "anonymous";
     if (!memoryPersistenceReadyRef.current) {
       memoryPersistenceReadyRef.current = true;
+      memoryPersistenceScopeRef.current = memoryScope;
       return;
     }
-    persistStoredMemories(memories);
-    persistStoredMemoryEnabled(memoryEnabled);
-  }, [memories, memoryEnabled]);
+    if (memoryPersistenceScopeRef.current !== memoryScope) {
+      memoryPersistenceScopeRef.current = memoryScope;
+      return;
+    }
+    if (session?.user && !cloudLoaded) return;
+
+    persistStoredMemories(memories, undefined, memoryScope);
+    persistStoredMemoryEnabled(memoryEnabled, undefined, Date.now(), memoryScope);
+  }, [memories, memoryEnabled, session?.user?.id, cloudLoaded]);
 
   useEffect(() => {
     try {
@@ -178,11 +187,15 @@ export default function App() {
     if (!supabase || !session?.user) {
       setCloudLoaded(false);
       setCloudStatus("Только на этом устройстве");
+      setMemories(readStoredMemories(undefined, "anonymous"));
+      setMemoryEnabled(readStoredMemoryPreference(undefined, "anonymous")?.enabled ?? false);
       return;
     }
     let alive = true;
     setCloudLoaded(false);
     setCloudStatus("Подключаем облако…");
+    setMemories(readStoredMemories(undefined, session.user.id));
+    setMemoryEnabled(readStoredMemoryPreference(undefined, session.user.id)?.enabled ?? false);
     Promise.all([
       supabase.from("qq_ai_threads").select("id,messages").order("updated_at", { ascending: false }).limit(1).maybeSingle(),
       supabase.from("qq_ai_preferences").select("memory_enabled,learned_preferences,updated_at").eq("user_id", session.user.id).maybeSingle(),
@@ -195,8 +208,8 @@ export default function App() {
           setThreadId(threadResult.data.id);
         }
       }
-      const localMemories = readStoredMemories();
-      const localMemoryPreference = readStoredMemoryPreference();
+      const localMemories = readStoredMemories(undefined, session.user.id);
+      const localMemoryPreference = readStoredMemoryPreference(undefined, session.user.id);
       const cloudMemories = normalizeMemoryEntries(prefsResult.data?.learned_preferences);
       const mergedMemories = normalizeMemoryEntries([...localMemories, ...cloudMemories]);
       const cloudUpdatedAt = prefsResult.data?.updated_at
