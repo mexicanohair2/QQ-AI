@@ -324,3 +324,24 @@ test("public capability response does not expose third-party model branding", as
   assert.doesNotMatch(capabilities, /Qwen/i);
   assert.match(capabilities, /offlineText: \{ state: "available" \}/);
 });
+
+
+test("assistant answers can be read aloud locally and speech playback can be stopped", async () => {
+  const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+  assert.match(app, /function speakMessage\(content: string, index: number\)/);
+  assert.match(app, /new SpeechSynthesisUtterance/);
+  assert.match(app, /utterance\.lang = "ru-RU"/);
+  assert.match(app, /function stopSpeech\(\)/);
+  assert.match(app, /window\.speechSynthesis\.cancel\(\)/);
+  assert.match(app, /Озвучить ответ/);
+  assert.match(styles, /\.feedback \.speak-button/);
+});
+
+test("online mode falls back to the local model when cloud inference is unconfigured or unavailable", async () => {
+  const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
+  assert.match(app, /mode === "online" && onlineModelReady === false/);
+  assert.match(app, /if \(offlineReady\)[\s\S]*?setMode\("offline"\)[\s\S]*?await sendOffline\(next\)/);
+  assert.match(app, /Онлайн-модель недоступна\. Переключаюсь на локальную/);
+  assert.match(app, /Облачная модель QQ AI ещё не подключена/);
+});
