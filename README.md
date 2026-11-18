@@ -9,6 +9,7 @@ QQ AI — независимый русскоязычный ИИ-помощни�
 - [Master Execution Prompt — единые правила разработки, архитектура, приоритеты и критерии готовности](docs/QQ_AI_MASTER_EXECUTION_PROMPT.md)
 - [Мультимодальность, поиск и усиление рассуждений](docs/superpowers/specs/2026-11-18-qq-ai-multimodal-search-voice.md)
 - [QQCross Game AI — контракт будущей игровой интеграции](docs/QQCROSS_GAME_AI.md)
+- [Текущий статус и реалистичная оценка сроков](docs/QQ_AI_PROGRESS_AND_ESTIMATE.md)
 
 ## Цели QQ AI
 
