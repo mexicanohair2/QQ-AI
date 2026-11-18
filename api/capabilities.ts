@@ -15,6 +15,17 @@ export default async function handler(request: Request): Promise<Response> {
       audioAnalysis: false,
       note: "Модель скачивается только по нажатию пользователя. Она небольшая и англоязычная; качество русского текста и OCR может быть ограниченным. Нужна поддержка WebGPU; физический тест Honor 400 ещё не проведён.",
     },
+    localSpeech: {
+      state: "implemented_device_check_required",
+      runtime: "WebGPU browser worker",
+      model: "onnx-community/whisper-tiny",
+      languages: "multilingual; Russian transcription",
+      estimatedDownloadMb: { min: 70, max: 90 },
+      maxRecordingSeconds: 20,
+      sampleRateHz: 16000,
+      audioSentToServer: false,
+      note: "Запись до 20 секунд обрабатывается локально и вставляется в поле сообщения. Модель скачивается только после явного нажатия; требуется WebGPU. Перед отправкой проверь текст. Физический тест Honor 400 ещё не проведён.",
+    },
     videoUnderstanding: { state: hasVision ? "configured" : "unconfigured", note: "Облачная модель не подключена. Локальный режим может анализировать до четырёх выбранных кадров с временными отметками; аудиодорожка не анализируется." },
     offlineText: { state: "available" }
   };
