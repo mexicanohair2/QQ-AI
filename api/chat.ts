@@ -93,6 +93,7 @@ export default async function handler(request: Request): Promise<Response> {
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 55_000);
+  let streamingResponse = false;
 
   try {
     const raw = await request.text();
@@ -152,7 +153,32 @@ export default async function handler(request: Request): Promise<Response> {
     }
 
     if (!upstream.body) return json({ error: "Онлайн-модель не вернула поток ответа." }, 502);
-    return new Response(upstream.body, {
+    const upstreamReader = upstream.body.getReader();
+    streamingResponse = true;
+    const responseBody = new ReadableStream<Uint8Array>({
+      async pull(streamController) {
+        try {
+          const { done, value } = await upstreamReader.read();
+          if (done) {
+            streamController.close();
+            clearTimeout(timeout);
+            streamingResponse = false;
+          } else {
+            streamController.enqueue(value);
+          }
+        } catch (streamError) {
+          clearTimeout(timeout);
+          streamingResponse = false;
+          streamController.error(streamError);
+        }
+      },
+      async cancel(reason) {
+        clearTimeout(timeout);
+        streamingResponse = false;
+        try { await upstreamReader.cancel(reason); } catch { /* upstream may already be closed */ }
+      },
+    });
+    return new Response(responseBody, {
       headers: {
         "Content-Type": "text/event-stream; charset=utf-8",
         "Cache-Control": "no-cache, no-transform",
@@ -167,6 +193,6 @@ export default async function handler(request: Request): Promise<Response> {
       error: timedOut ? "Превышено время ожидания онлайн-модели или поиска." : "Не удалось выполнить онлайн-запрос QQ AI.",
     }, timedOut ? 504 : 502);
   } finally {
-    clearTimeout(timeout);
+    if (!streamingResponse) clearTimeout(timeout);
   }
 }
