@@ -3,6 +3,7 @@ import {
   buildSearchOnlyAnswer,
   parseBingResults,
   parseDuckDuckGoResults,
+  mergeSearchResults,
 } from "../src/lib/qq-ai-core";
 
 export const config = { runtime: "edge" };
@@ -55,8 +56,8 @@ export default async function handler(request: Request): Promise<Response> {
       },
     ];
 
-    const providerFailures: string[] = [];
-    for (const provider of providers) {
+    const retrievedAt = new Date().toISOString();
+    const providerResults = await Promise.all(providers.map(async provider => {
       const providerController = new AbortController();
       const providerTimeout = setTimeout(() => providerController.abort(), 5_000);
       try {
@@ -70,43 +71,43 @@ export default async function handler(request: Request): Promise<Response> {
         });
         if (!response.ok) {
           try { await response.body?.cancel(); } catch { /* upstream may already be closed */ }
-          providerFailures.push(provider.name + ":" + response.status);
-          continue;
+          return { name: provider.name, sources: [] };
         }
 
-        let html: string;
         try {
-          html = await readResponseTextLimited(response, 2_500_000);
+          const html = await readResponseTextLimited(response, 2_500_000);
+          return { name: provider.name, sources: provider.parse(html, retrievedAt) };
         } catch {
-          providerFailures.push(provider.name + ":body-too-large");
-          continue;
+          return { name: provider.name, sources: [] };
         }
-
-        const sources = provider.parse(html);
-        if (!sources.length) {
-          providerFailures.push(provider.name + ":no-organic-results");
-          continue;
-        }
-
-        return json({
-          answer: buildSearchOnlyAnswer(sources),
-          sources,
-          provider: provider.name + " HTML search results",
-          synthesizedByModel: false,
-          retrievedAt: new Date().toISOString(),
-        });
       } catch {
-        providerFailures.push(provider.name + ":network-or-timeout");
+        return { name: provider.name, sources: [] };
       } finally {
         clearTimeout(providerTimeout);
       }
+    }));
+
+    const sources = mergeSearchResults(providerResults.map(result => result.sources), 8);
+    const providersUsed = providerResults
+      .filter(result => result.sources.length > 0)
+      .map(result => result.name);
+
+    if (!sources.length) {
+      return json({
+        error: "Поисковые системы не вернули доступную выдачу. Попробуй переформулировать запрос или повторить позже.",
+        code: "SEARCH_PROVIDERS_UNAVAILABLE",
+        providersAttempted: providers.length,
+      }, 502);
     }
 
     return json({
-      error: "Поисковые системы не вернули доступную выдачу. Попробуй повторить запрос позже.",
-      code: "SEARCH_PROVIDERS_UNAVAILABLE",
-      providersAttempted: providers.length,
-    }, 502);
+      answer: buildSearchOnlyAnswer(sources),
+      sources,
+      provider: providersUsed.join(" + "),
+      providersUsed,
+      synthesizedByModel: false,
+      retrievedAt,
+    });
   } catch {
     return json({ error: "Не удалось выполнить поиск QQ AI." }, 502);
   }
