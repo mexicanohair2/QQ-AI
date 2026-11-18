@@ -143,12 +143,11 @@ export default async function handler(request: Request): Promise<Response> {
     });
 
     if (!upstream.ok) {
-      const detail = (await upstream.text().catch(() => ""))
-        .replace(/<[^>]*>/g, " ")
-        .replace(/\s+/g, " ")
-        .slice(0, 260);
+      // Provider error bodies are untrusted, potentially unbounded, and may contain
+      // internal diagnostics. Do not relay them to the browser.
+      try { await upstream.body?.cancel(); } catch { /* upstream may already be closed */ }
       return json({
-        error: "Собственная онлайн-модель QQ AI ответила с ошибкой " + upstream.status + (detail ? ". " + detail : ""),
+        error: "Собственная онлайн-модель QQ AI временно недоступна (ошибка шлюза провайдера).",
         code: "MODEL_UPSTREAM_ERROR",
       }, 502);
     }
