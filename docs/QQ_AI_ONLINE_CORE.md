@@ -1,65 +1,102 @@
 # QQ AI Online Core
 
-**Status:** backend foundation implemented; production model runtime and media UI are not yet deployed.
+**Status:** search and multimodal request foundations implemented; no production QQ model or inference hardware is deployed.
 
 ## Product boundary
 
-- **QQ AI Online** is the primary assistant mode. It must use a stronger cloud-hosted model and must not silently fall back to Qwen.
-- **Qwen2.5-0.5B** is a separately selected offline text fallback. It is not the online model and is not described as multimodal.
-- QQ AI's orchestrator, task routing, search, safety boundaries, memory and evaluation are project-owned. A foundation model's weights are a separate artifact; this repository does not claim to have trained a foundation model from scratch.
+- **QQ AI Online** is the intended primary assistant. It uses a QQ-owned orchestration layer and, once deployed, a self-hosted QQ model runtime. It must never silently fall back to Qwen.
+- **Qwen2.5-0.5B** remains a separately selected offline text fallback. It is not the online model and is not described as multimodal.
+- QQ AI's routing, search, media preparation, safety boundaries, memory, UI and evaluation are project-owned. Model weights and GPU serving are separate infrastructure artifacts.
+- "Stronger than Qwen" is a target measured against the installed Qwen2.5-0.5B baseline, not a claim made before benchmarking.
 
-## Implemented backend
+## Implemented foundations
 
-### Text gateway — `POST /api/chat`
+### Text gateway — POST /api/chat
 
-Environment:
-- `QQ_AI_API_URL`: full OpenAI-compatible chat-completions URL for the selected inference runtime.
-- `QQ_AI_MODEL`: model identifier accepted by that runtime.
-- `QQ_AI_API_KEY`: optional server-only credential; never exposed to the browser.
+Server-side variables:
+- `QQ_AI_API_URL`: full HTTPS OpenAI-compatible chat-completions URL.
+- `QQ_AI_MODEL`: model identifier accepted by the QQ inference runtime.
+- `QQ_AI_API_KEY`: optional server-only credential.
 
-The route validates message shape/length, applies a timeout, streams model output, and returns an explicit `ONLINE_MODEL_UNCONFIGURED` error when no model runtime is configured. It no longer depends on Cerebras-specific environment variables.
+The route validates message structure and request size, validates the endpoint as HTTPS, applies a timeout, streams model output and returns a clear `ONLINE_MODEL_UNCONFIGURED` response when the runtime is absent. It does not call Cerebras or another consumer API by default. An adapter is not a deployed model.
 
-### Web search — inside `POST /api/chat`
+### Web search — POST /api/search and POST /api/chat
 
-The route searches DuckDuckGo HTML for queries that explicitly or implicitly require current information, adds up to six bounded snippets to the model context, and labels them as untrusted evidence. The model is instructed not to follow instructions found inside search results and to cite real result URLs.
+- Search intent detection supports Russian and English prompts asking for current or explicitly searched information.
+- Server-side search retrieves DuckDuckGo result titles, HTTPS links, domains and short snippets.
+- The dedicated `/api/search` route returns a search-only answer with visible links when the generation model is not yet deployed. It clearly marks this as search results, not AI synthesis.
+- `/api/chat` can supply search snippets to the configured QQ model as untrusted evidence and asks it to cite the numbered sources.
+- Search requests are bounded by input length and timeout; result URLs are normalized and non-HTTPS targets rejected.
 
-Current limitations:
-- search snippets only; full-page extraction, source quality scoring and cross-source verification are not yet implemented;
-- the search HTML format can change and must be covered by live integration checks;
-- search may be unavailable or return no usable snippets.
+Limitations: only search snippets are currently parsed; full-page extraction, source-quality ranking, independent cross-source verification, rate limiting and live search reliability tests remain to be done. Search page markup may change.
 
-### Vision gateway — `POST /api/vision`
+### Image and video — POST /api/vision
 
-Environment:
-- `QQ_AI_VISION_API_URL`: full OpenAI-compatible vision chat-completions URL.
-- `QQ_AI_VISION_MODEL`: vision model identifier.
+Server-side variables:
+- `QQ_AI_VISION_API_URL`: full HTTPS OpenAI-compatible vision chat-completions URL.
+- `QQ_AI_VISION_MODEL`: image/video-frame capable model identifier.
 - `QQ_AI_VISION_API_KEY`: optional server-only credential.
 
-Accepts bounded image attachments or up to eight timestamped video frames, validates MIME types and base64 payload sizes, and sends multimodal input to the configured model. It does not retain media in this route. The browser upload UI, local video frame extraction, audio transcription and end-to-end tests remain unfinished.
+Client functionality:
+- The composer has an attachment control, previews and remove actions for images and videos.
+- JPEG, PNG and WebP images are compressed locally before sending.
+- MP4/WebM videos up to 60 seconds are sampled locally into at most eight timestamped JPEG frames.
+- Only those sampled frames are sent; the original video and audio track are not uploaded by this implementation.
+- The user explicitly presses Send before any media is transmitted.
+- The server validates MIME type, request size, frame count and monotonic timestamps. It does not persist media in this route.
 
-### Capability status — `GET /api/capabilities`
+Vision still requires a compatible deployed model endpoint. Audio transcription, OCR-specific quality tuning, multi-page document ingestion and Android device testing remain unfinished. A video response describes sampled frames, not audio or every moment of the clip.
 
-Reports separately whether online text, search, image, video and offline Qwen capabilities are available or unconfigured. The UI should consume this endpoint rather than imply unconfigured features work.
+### Capabilities — GET /api/capabilities
 
-## Model selection and deployment rules
+Reports configured or unavailable status for online text, search, image understanding, video-frame understanding and offline Qwen. The UI reads this status rather than assuming every feature is connected.
 
-1. Prefer an open-weight model with strong Russian reasoning, long context and a compatible vision sibling where possible.
-2. Benchmark candidate models on the QQ AI acceptance matrix before selection. Compare against Qwen 0.5B using the same prompts and scoring.
-3. Verify age eligibility, region, privacy, model input modalities, free quotas and billing behavior using current official terms.
-4. Do not enable paid billing, payment cards, auto top-up or a paid plan without explicit approval from the adult project owner.
-5. Do not use a provider whose terms require an adult account by having a minor create an account or by bypassing age checks.
-6. Never claim the online model is stronger until the benchmark demonstrates it.
+### Voice and offline mode
 
-## Current deployment blocker
+- Browser voice dictation inserts an editable transcript; it does not auto-send.
+- Speech recognition is browser-dependent and may process audio remotely.
+- Qwen offline runs through WebLLM/WebGPU and is selected explicitly by the user. The app does not silently use it when online mode fails.
 
-The online text gateway and vision gateway are adapters; they are not GPU compute. No model weights are currently hosted for QQ AI. Vercel's app deployment alone does not provide the GPU resources required to serve a competitive large model. A compliant inference runtime and its eligible account/credentials must be selected before live online reasoning and vision can work.
+## Model ownership and deployment
 
-## Next engineering steps
+The intended QQ model is a QQ-adapted open-weight model with its own versioned checkpoints, training recipe, data provenance, evaluation and self-hosted inference runtime. The repository does not claim to have trained a new foundation model from random initialization.
 
-1. Select a legally eligible, genuinely free/no-card inference runtime or an adult-owned approved runtime.
-2. Deploy and benchmark a strong open-weight Russian-capable model; configure only server-side environment variables.
-3. Connect a real vision model and verify OCR, tables, formulas, charts and diagrams.
-4. Add Android-friendly image/video attachment UI and bounded client-side video frame sampling.
-5. Improve search with page extraction, provenance, source ranking and prompt-injection tests.
-6. Add end-to-end tests for configured and unconfigured provider states.
-7. Verify on an actual Android device; automated CI is not physical-device QA.
+The first practical route is:
+1. Select an open-weight base model after license, Russian-language reasoning, vision, context and deployment evaluation.
+2. Create QQ-specific curated instruction/evaluation data with provenance and content-quality checks.
+3. Fine-tune and benchmark candidate checkpoints against Qwen2.5-0.5B on the same Russian test set.
+4. Host the selected weights on an eligible GPU runtime owned/approved for this project.
+5. Configure the server-only QQ endpoint variables and run end-to-end benchmarks before enabling capability flags.
+
+Training from random initialization would require a much larger dataset and substantial GPU compute. Vercel serves the web app/API routes; it does not provide a continuously available large-model GPU. Free demo GPU allocations are not a valid promise of reliable 24/7 inference.
+
+## Safety, privacy and cost boundaries
+
+- Keep provider credentials server-side.
+- Never request that the user paste keys into chat.
+- Do not introduce paid plans, payment cards, auto-top-up or paid inference without explicit approval from the adult project owner.
+- Verify account age terms and region restrictions; never bypass eligibility rules.
+- Uploaded media is not retained by the vision route; only sampled video frames are transmitted.
+- Web content, OCR and image text are untrusted inputs, not instructions.
+- Apply rate limits and operational monitoring before public production.
+
+## Verification boundary
+
+Latest GitHub Actions run on the online-core branch passed:
+- QQCross Game AI contract tests;
+- QQ AI online/search/media tests;
+- TypeScript check;
+- production build.
+
+These tests do not prove a production model exists, live search reliability, inference quality, or Android device compatibility. There is currently no hosted QQ model or configured vision model. No physical Honor 400 test has been performed.
+
+## Next steps
+
+1. Resolve GPU hosting without violating the project's no-card/no-unapproved-spend boundary.
+2. Select the candidate base model and document license and serving hardware requirements.
+3. Build the QQ fine-tuning data/evaluation pipeline and compare against the Qwen baseline.
+4. Deploy a QQ-owned inference endpoint and verify streaming, timeouts, concurrency and privacy.
+5. Connect and benchmark image/OCR and video-frame capabilities using a compatible vision model.
+6. Add full-page search extraction, source ranking, citations and prompt-injection integration tests.
+7. Complete Android browser acceptance before production claims.
+8. Keep QQCross untouched until a separately approved integration stage.
