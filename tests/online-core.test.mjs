@@ -52,12 +52,16 @@ test("browser media pipeline compresses images and uploads only sampled video fr
   assert.match(app, /исходный ролик/);
 });
 
-test("online UI does not silently switch to the offline model", async () => {
+test("offline-first chat can answer locally and enrich current questions with real search sources", async () => {
   const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
-  assert.match(app, /if \(mode === "online"\) \{/);
-  assert.match(app, /if \(!shouldSearchWeb\(content\)\) throw onlineError/);
+  assert.match(app, /useState<Mode>\("offline"\)/);
+  assert.match(app, /async function sendOffline\(history: Message\[\]\)/);
+  assert.match(app, /if \(shouldSearchWeb\(lastUserMessage\)\)/);
+  assert.match(app, /fetch\("\/api\/search"/);
+  assert.match(app, /buildSearchContext\(sources\)/);
+  assert.match(app, /Не выдавай сведения за актуальные/);
   assert.match(app, /sendOffline\(next\)/);
-  assert.match(app, /onlineModelReady/);
+  assert.match(app, /if \(mode === "online"\) \{/);
 });
 
 test("chat gateway rejects cross-origin browser requests", async () => {
@@ -300,4 +304,12 @@ test("offline model branding is hidden from the interface and voice input uses a
   assert.doesNotMatch(app, /🎙/);
   assert.match(app, /gpu\.requestAdapter\(\)/);
   assert.match(app, /if \(!adapter\)/);
+});
+
+
+test("offline-first welcome screen offers one clear action to prepare the local AI", async () => {
+  const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
+  assert.match(app, /Загрузить и запустить ИИ/);
+  assert.match(app, /Локальная модель ещё не загружена/);
+  assert.match(app, /для актуальных тем может искать источники в интернете/);
 });
