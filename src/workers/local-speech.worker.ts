@@ -46,6 +46,7 @@ async function loadModel(): Promise<void> {
       MODEL_ID,
       {
         device: "webgpu",
+        dtype: "q8",
         progress_callback: reportProgress,
       },
     );
