@@ -5,6 +5,7 @@ import {
   buildSearchOnlyAnswer,
   isSupportedImageDataUrl,
   normalizeSearchUrl,
+  parseBingResults,
   parseDuckDuckGoResults,
   shouldSearchWeb,
 } from "../src/lib/qq-ai-core.ts";
@@ -61,4 +62,32 @@ test("accepts only bounded base64 image data URLs", () => {
   assert.equal(isSupportedImageDataUrl("data:image/jpeg;base64,QUJDRA=="), true);
   assert.equal(isSupportedImageDataUrl("https://example.com/image.jpg"), false);
   assert.equal(isSupportedImageDataUrl("data:text/plain;base64,QUJDRA=="), false);
+});
+
+
+test("unwraps Bing tracking redirects and rejects internal tracking URLs", () => {
+  const target = "https://www.example.com/articles/qq-ai";
+  const encoded = "a1" + btoa(target);
+  const redirect = "https://www.bing.com/ck/a?u=" + encodeURIComponent(encoded) + "&ntb=1";
+  assert.equal(normalizeSearchUrl(redirect), target);
+  assert.equal(normalizeSearchUrl("https://www.bing.com/ck/a?u=not-encoded"), null);
+});
+
+test("parses Bing organic results, removes tracking redirects and skips unsafe URLs", () => {
+  const destination = "https://docs.example.org/guide";
+  const redirect = "https://www.bing.com/ck/a?u=" + encodeURIComponent("a1" + btoa(destination));
+  const html = [
+    '<ol id="b_results">',
+    '<li class="b_algo"><h2><a href="' + redirect + '">Официальная документация</a></h2>',
+    '<div class="b_caption"><p>Описание <strong>документации</strong>.</p></div></li>',
+    '<li class="b_algo"><h2><a href="http://unsafe.example">Небезопасно</a></h2><p>Не показывать.</p></li>',
+    '<li class="b_algo"><h2><a href="https://second.example.net/page">Вторая страница</a></h2><p>Короткий сниппет.</p></li>',
+    '</ol>',
+  ].join("");
+  const results = parseBingResults(html, "2026-11-18T12:00:00.000Z");
+  assert.equal(results.length, 2);
+  assert.equal(results[0].url, destination);
+  assert.equal(results[0].domain, "docs.example.org");
+  assert.equal(results[0].excerpt, "Описание документации.");
+  assert.equal(results[1].domain, "second.example.net");
 });
