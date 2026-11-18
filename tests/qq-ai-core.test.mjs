@@ -91,3 +91,18 @@ test("parses Bing organic results, removes tracking redirects and skips unsafe U
   assert.equal(results[0].excerpt, "Описание документации.");
   assert.equal(results[1].domain, "second.example.net");
 });
+
+test("search-only answer escapes untrusted Markdown titles", async () => {
+  const { buildSearchOnlyAnswer } = await import("../src/lib/qq-ai-core.ts");
+  const answer = buildSearchOnlyAnswer([{
+    title: "Заголовок ](https://evil.example) **подмена**",
+    url: "https://safe.example/article",
+    domain: "safe.example",
+    retrievedAt: "2026-11-18T12:00:00.000Z",
+    excerpt: "Фрагмент",
+  }]);
+  assert.ok(answer.includes("\\]"));
+  assert.ok(answer.includes("\\*"));
+  assert.ok(!answer.includes("](https://evil.example)"));
+  assert.ok(answer.includes("](<https://safe.example/article>)"));
+});
