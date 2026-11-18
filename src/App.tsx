@@ -10,7 +10,7 @@ import { dataUrlToBase64, prepareImage, sampleVideoFrames } from "./lib/media";
 import { buildSearchContext, shouldSearchWeb, type QQSearchSource } from "./lib/qq-ai-core";
 import { readOpenAIChatStream } from "./lib/openai-stream";
 import { readChatMessages, type ChatMessage } from "./lib/chat-storage";
-import { buildMemoryInstruction, normalizeMemoryEntries, readStoredMemories, persistStoredMemories, readStoredMemoryEnabled, persistStoredMemoryEnabled, MAX_MEMORY_CHARS } from "./lib/user-memory";
+import { buildMemoryInstruction, normalizeMemoryEntries, readStoredMemories, persistStoredMemories, readStoredMemoryPreference, resolveMemoryEnabled, persistStoredMemoryEnabled, MAX_MEMORY_CHARS } from "./lib/user-memory";
 
 type Message = ChatMessage;
 type MediaAttachment = { id: string; file: File; name: string; kind: "image" | "video"; previewUrl: string };
@@ -83,7 +83,7 @@ export default function App() {
   const speechRunRef = useRef(0);
   const recognitionRef = useRef<any>(null);
   const [authMessage, setAuthMessage] = useState("");
-  const [memoryEnabled, setMemoryEnabled] = useState(() => readStoredMemoryEnabled() ?? false);
+  const [memoryEnabled, setMemoryEnabled] = useState(() => readStoredMemoryPreference()?.enabled ?? false);
   const memoryPersistenceReadyRef = useRef(false);
   const [memoryDraft, setMemoryDraft] = useState("");
   const [memories, setMemories] = useState<string[]>(() => readStoredMemories());
@@ -185,7 +185,7 @@ export default function App() {
     setCloudStatus("Подключаем облако…");
     Promise.all([
       supabase.from("qq_ai_threads").select("id,messages").order("updated_at", { ascending: false }).limit(1).maybeSingle(),
-      supabase.from("qq_ai_preferences").select("memory_enabled,learned_preferences").eq("user_id", session.user.id).maybeSingle(),
+      supabase.from("qq_ai_preferences").select("memory_enabled,learned_preferences,updated_at").eq("user_id", session.user.id).maybeSingle(),
     ]).then(async ([threadResult, prefsResult]) => {
       if (!alive) return;
       if (threadResult.data?.messages && Array.isArray(threadResult.data.messages)) {
@@ -196,17 +196,24 @@ export default function App() {
         }
       }
       const localMemories = readStoredMemories();
-      const localMemoryEnabled = readStoredMemoryEnabled();
+      const localMemoryPreference = readStoredMemoryPreference();
       const cloudMemories = normalizeMemoryEntries(prefsResult.data?.learned_preferences);
       const mergedMemories = normalizeMemoryEntries([...localMemories, ...cloudMemories]);
-      const memoryEnabledValue = localMemoryEnabled ?? Boolean(prefsResult.data?.memory_enabled);
+      const cloudUpdatedAt = prefsResult.data?.updated_at
+        ? Date.parse(prefsResult.data.updated_at)
+        : null;
+      const memoryEnabledValue = resolveMemoryEnabled(
+        localMemoryPreference,
+        prefsResult.data ? Boolean(prefsResult.data.memory_enabled) : null,
+        cloudUpdatedAt !== null && Number.isFinite(cloudUpdatedAt) ? cloudUpdatedAt : null,
+      );
       setMemoryEnabled(memoryEnabledValue);
       setMemories(mergedMemories);
 
       setCloudStatus("Облако подключено");
       if (threadResult.error || prefsResult.error) {
         setCloudStatus("Облако подключено частично");
-      } else if (prefsResult.data || localMemories.length > 0 || localMemoryEnabled !== null) {
+      } else if (prefsResult.data || localMemories.length > 0 || localMemoryPreference !== null) {
         const cloudNeedsUpdate = !prefsResult.data ||
           JSON.stringify(mergedMemories) !== JSON.stringify(cloudMemories) ||
           memoryEnabledValue !== Boolean(prefsResult.data.memory_enabled);
