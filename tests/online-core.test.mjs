@@ -154,3 +154,10 @@ test("welcome screen offers an explicit path to the offline model when online in
   assert.match(app, /Открыть Qwen/);
   assert.match(app, /Перейти к Qwen/);
 });
+
+
+test("capability-check failure remains unknown instead of falsely claiming no model is configured", async () => {
+  const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
+  assert.match(app, /setOnlineModelReady\(null\); setVisionReady\(null\); setCapabilitiesUnavailable\(true\)/);
+  assert.match(app, /Не удалось проверить статус моделей/);
+});
