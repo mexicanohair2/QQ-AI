@@ -238,3 +238,13 @@ test("chat gateway never relays unbounded or provider-internal error bodies to t
   assert.doesNotMatch(errorBranch, /upstream\.text\(\)|readResponseTextLimited/);
   assert.doesNotMatch(errorBranch, /detail|Authorization|apiKey|token/i);
 });
+
+
+test("manual search endpoint uses a provider fallback and returns only parsed organic sources", async () => {
+  const search = await readFile(new URL("../api/search.ts", import.meta.url), "utf8");
+  assert.match(search, /html\.duckduckgo\.com\/html/);
+  assert.match(search, /www\.bing\.com\/search/);
+  assert.match(search, /parseBingResults/);
+  assert.match(search, /SEARCH_PROVIDERS_UNAVAILABLE/);
+  assert.match(search, /synthesizedByModel: false/);
+});
