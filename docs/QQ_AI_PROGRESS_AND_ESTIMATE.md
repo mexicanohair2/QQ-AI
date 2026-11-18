@@ -1,6 +1,6 @@
 # QQ AI — progress and realistic delivery estimate
 
-Last verified: 2026-11-18 (latest preview build commit `9f928a261617deade7e7ac8c69cd684fa6276aab`). This document describes the feature-branch preview, not a production release.
+Last verified: 2026-11-18 (feature-branch commit `870358c576a1905182906750046a31049e03c73f`; CI run `44322333933` SUCCESS). This document describes the feature-branch preview, not a production release.
 
 ## Verified now
 
@@ -23,7 +23,7 @@ Last verified: 2026-11-18 (latest preview build commit `9f928a261617deade7e7ac8c
 | Web app / chat UI | Implemented in preview | Mobile browser QA, accessibility, error-state polish |
 | Qwen Offline | Existing WebLLM integration | Real Honor 400 WebGPU and storage test |
 | QQ Online gateway | Server-side adapter and capability reporting implemented | Deploy an actual QQ model endpoint and verify streamed inference |
-| QQ Search | DuckDuckGo search snippets, URL sanitation, citations/context contract | Robust live tests, full-page extraction, source corroboration, search controls |
+| QQ Search | DuckDuckGo + Bing queried concurrently; deduplicated, sanitized results and source context; route tests use mocked provider responses | Live POST on deployed preview, full-page extraction and source corroboration |
 | Photos | Attachment UI, client preparation, protected server route contract | Deploy and test a compatible vision model; OCR/table/formula/chart acceptance |
 | Video | Local sampling of up to eight timestamped frames; audio is not uploaded | Vision inference for frames; separate audio transcription and synchronized audio/video analysis |
 | Voice | Browser speech-to-text prototype | Device/browser compatibility tests; separate audio conversation/transcription model |
@@ -237,3 +237,38 @@ A useful first online release is therefore measured in **weeks**, not hours. A s
 - Ручное воспроизведение речи, WebGPU-загрузка и генерация на Honor 400 не проверены физически.
 - Живой POST-запрос к DuckDuckGo/Bing через deployed endpoint в этой сессии не проверен; поисковые парсеры и контракты покрыты тестами.
 - PR остаётся в отдельной feature-ветке; merge, production deploy и изменения QQCross не выполнялись.
+
+
+## Дополнительная проверка 18 ноября 2026 — поиск, память и защита аккаунтов
+
+### Последняя проверенная кодовая версия
+
+- Feature-branch commit: `870358c576a1905182906750046a31049e03c73f`.
+- GitHub Actions run `44322333933`: SUCCESS. Game AI — 6/6 тестов; online/search/media/memory — 55/55; валидатор обучающих данных — 4/4; TypeScript и production build — успешно.
+- Production dependency audit: 0 уязвимостей. Полный audit по-прежнему сообщает 4 high в dev/build-цепочке Vite → fdir/tinyglobby/picomatch; они не относятся к runtime dependency set. Не запускать принудительное обновление major-версий без проверки совместимости.
+- Preview для этого кода должен быть отдельно создан и проверен по точному commit SHA; READY для более ранней версии не считать подтверждением актуального кода.
+
+### Поиск
+
+- `POST /api/search` запрашивает DuckDuckGo и Bing параллельно, а не ждёт первый удачный источник.
+- Результаты объединяются равномерно, нормализуются и очищаются от повторяющихся URL; небезопасные схемы/адреса отбрасываются.
+- В заголовках поисковых ссылок экранируется Markdown, чтобы текст страницы не мог подменить ссылку.
+- Добавлены тесты реального обработчика с подменёнными HTTP-ответами: оба провайдера, дубликаты, отказ одного провайдера, cross-origin и запрет не-web Origin. Это проверка логики API, но не доказательство доступности DDG/Bing из production-сети.
+- `/api/capabilities` отражает оба поисковых провайдера. Полное извлечение страниц и синтез ответов облачной моделью не подключены.
+
+### Память и Supabase
+
+- Записи памяти ограничены 20 элементами по 240 символов, нормализуются и очищаются от управляющих символов/дубликатов.
+- Память передаётся модели как недоверенные данные с явным запретом исполнять инструкции из записей.
+- Локальные записи и флаг включения сохраняются между перезапусками; флаг имеет отметку времени, поэтому при синхронизации выбирается более новое явное значение между устройством и облаком.
+- Локальные ключи разделены по Supabase user ID; анонимная память хранится отдельно. При смене аккаунта локальные записи другого пользователя не должны попадать в prompt.
+- Для `qq_ai_threads`, `qq_ai_preferences` и `qq_ai_feedback` проверено включение RLS и политики доступа по `auth.uid() = user_id`.
+- Supabase Security Advisor продолжает предупреждать, что проверка скомпрометированных паролей отключена. QQ AI использует email OTP; настройка не менялась.
+
+### Ограничения
+
+- QQ Online и Vision остаются `unconfigured`: собственные веса QQ и GPU inference endpoint не размещены.
+- Офлайн Qwen доступен только при поддержке WebGPU и достаточном хранилище; реальная загрузка и генерация на Honor 400 не проверены.
+- Живой POST-запрос к deployed `/api/search` в этой проверке не выполнялся; автоматические тесты запускают сам route handler с контролируемыми upstream responses.
+- Preview/HTTP 200 не подтверждают работу микрофона, WebGPU, видеокадров или мобильную производительность на физическом устройстве.
+- PR остаётся draft; merge, production deployment, изменения QQCross и APK не выполнялись.
