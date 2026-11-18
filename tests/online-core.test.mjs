@@ -318,3 +318,9 @@ test("offline chat does not append a user message before the local model is read
   const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
   assert.match(app, /mode === "offline" && !offlineReady\)[\s\S]*?Сначала нажми «Загрузить и запустить ИИ»[\s\S]*?return;/);
 });
+
+test("public capability response does not expose third-party model branding", async () => {
+  const capabilities = await readFile(new URL("../api/capabilities.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(capabilities, /Qwen/i);
+  assert.match(capabilities, /offlineText: \{ state: "available" \}/);
+});
