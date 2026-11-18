@@ -625,3 +625,13 @@ test("local chat history and thread IDs are isolated by account scope", async ()
   assert.equal(readChatThreadId(storage, "user-c"), null);
   assert.equal(persistChatThreadId("bad thread", storage, "user-a"), false);
 });
+
+test("vision routing prefers cloud only in online mode and permits local fallback", async () => {
+  const { selectVisionBackend, canAttachMedia } = await import("../src/lib/vision-routing.ts");
+  assert.equal(selectVisionBackend("online", true, true), "cloud");
+  assert.equal(selectVisionBackend("online", false, true), "local");
+  assert.equal(selectVisionBackend("offline", true, true), "local");
+  assert.equal(selectVisionBackend("offline", true, false), "unavailable");
+  assert.equal(canAttachMedia("online", false, true), true);
+  assert.equal(canAttachMedia("offline", false, false), false);
+});
