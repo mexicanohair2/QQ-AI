@@ -49,6 +49,10 @@ function remarkAnswerUnderline() {
   };
 }
 
+function VoiceIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="2.5" width="6" height="12" rx="3" /><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.5M8.5 21.5h7" /></svg>;
+}
+
 export default function App() {
   const [messages, setMessages] = useState<Message[]>(readChatMessages);
   const [mode, setMode] = useState<Mode>("online");
@@ -507,7 +511,7 @@ export default function App() {
     const content = draft.trim() || (selected.length ? (selected[0].kind === "video" ? "Проанализируй это видео по выбранным кадрам." : "Проанализируй прикреплённое изображение.") : "");
     if ((!content && selected.length === 0) || busy) return;
     if (selected.length > 0 && mode !== "online") {
-      setError("Переключись на QQ AI Online: локальная Qwen не обрабатывает фото и видео.");
+      setError("Переключись в онлайн-режим: локальная модель не обрабатывает фото и видео.");
       return;
     }
     const attachmentInfo = selected.map(item => ({ name: item.name, kind: item.kind }));
@@ -665,8 +669,8 @@ export default function App() {
           <h1>О чём <em>подумаем</em> сегодня?</h1>
           <p className="welcome-copy">Задавай вопросы, исследуй идеи и создавай новое. Переключайся между облачным интеллектом и локальной моделью.</p>
           {mode === "online" && onlineModelReady === false && <div className="offline-card">
-            <div><b>Онлайн-модель пока не подключена</b><small>Сейчас доступны интернет-поиск и локальная Qwen после загрузки. Можно перейти в офлайн-режим.</small></div>
-            <button className="primary" onClick={() => { setMode("offline"); setStatus(offlineReady ? "Офлайн-модель готова" : "Сначала подготовь офлайн-модель"); }}>Открыть Qwen</button>
+            <div><b>Онлайн-модель пока не подключена</b><small>Сейчас доступны интернет-поиск и локальная модель после загрузки. Можно перейти в офлайн-режим.</small></div>
+            <button className="primary" onClick={() => { setMode("offline"); setStatus(offlineReady ? "Офлайн-модель готова" : "Сначала подготовь офлайн-модель"); }}>Открыть локальный режим</button>
           </div>}
           <div className="suggestions">
             <button onClick={() => setDraft("Помоги мне разобраться в новой теме и составь понятный план изучения.")}><span>✦</span><b>Разобраться в теме</b><small>Объяснение простыми словами</small></button>
@@ -674,7 +678,7 @@ export default function App() {
             <button onClick={() => setDraft("Помоги написать или улучшить текст.")}><span>✎</span><b>Работа с текстом</b><small>Написание и редактура</small></button>
           </div>
           {mode === "offline" && !offlineReady && <div className="offline-card">
-            <div><b>Подготовить офлайн-модель</b><small>Первое скачивание Qwen — около 1 ГБ. Загрузи её по Wi‑Fi один раз; затем она будет доступна без интернета.</small></div>
+            <div><b>Подготовить офлайн-модель</b><small>Первое скачивание модели — около 1 ГБ. Загрузи её по Wi‑Fi один раз; затем она будет доступна без интернета.</small></div>
             <button className="primary" onClick={loadOfflineModel} disabled={busy}>{busy ? "Загрузка…" : "Загрузить модель"}</button>
             {busy && <div className="progress"><span style={{ width: progress + "%" }} /></div>}
           </div>}
@@ -692,7 +696,7 @@ export default function App() {
         </div>}
       </div>
 
-      {error && <div className="error-banner">{error}{mode === "online" && onlineModelReady === false && error.includes("ещё не размещена") && <button className="secondary-button" onClick={() => { setMode("offline"); setError(""); setStatus(offlineReady ? "Офлайн-модель готова" : "Сначала подготовь офлайн-модель"); }}>Перейти к Qwen</button>}</div>}
+      {error && <div className="error-banner">{error}{mode === "online" && onlineModelReady === false && error.includes("ещё не размещена") && <button className="secondary-button" onClick={() => { setMode("offline"); setError(""); setStatus(offlineReady ? "Офлайн-модель готова" : "Сначала подготовь офлайн-модель"); }}>Перейти в офлайн-режим</button>}</div>}
       {mode === "offline" && !offlineReady && messages.length > 0 && <div className="offline-inline"><span>Офлайн-модель не загружена</span><button onClick={loadOfflineModel} disabled={busy}>Подготовить</button>{busy && <span>{progress}%</span>}</div>}
       {busy && <div className="task-running"><span className="task-running-dot" /><span><b>QQ AI выполняет задачу</b><small>Можно переключиться на другую вкладку. Не закрывай браузер, пока ответ не готов.</small></span></div>}
       <footer className="composer-area">
@@ -707,17 +711,17 @@ export default function App() {
         <div className="composer">
           <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm" multiple hidden onChange={handleFileSelection} />
           <button className="attach-button" type="button" onClick={() => fileInputRef.current?.click()} disabled={busy || mode !== "online" || visionReady !== true} aria-label="Прикрепить фото или видео" title={mode !== "online" ? "Медиа доступно в онлайн-режиме" : visionReady === false ? "Модуль Vision пока не подключён" : visionReady === null ? "Проверяем доступность Vision" : "Прикрепить фото или видео"}>＋</button>
-          <textarea value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }} placeholder={mode === "online" ? "Спросите о чём угодно…" : offlineReady ? "Сообщение для Qwen…" : "Можно посчитать пример или загрузить Qwen"} rows={1} disabled={busy} />
+          <textarea value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }} placeholder={mode === "online" ? "Спросите о чём угодно…" : offlineReady ? "Сообщение для локальной модели…" : "Можно посчитать пример или загрузить локальную модель"} rows={1} disabled={busy} />
           <button className="search-button" type="button" onClick={() => void searchWeb()} disabled={!draft.trim() || attachments.length > 0 || busy} aria-label="Поиск в интернете" title="Искать запрос в интернете">⌕</button>
-          <button className={`voice-button ${listening ? "listening" : ""}`} onClick={() => listening ? stopVoiceRecognition() : setVoiceNoticeOpen(true)} disabled={busy} aria-label={listening ? "Остановить запись" : "Голосовой ввод"} title={listening ? "Остановить запись" : "Голосовой ввод"}>{listening ? "■" : "🎙"}</button>
+          <button className={`voice-button ${listening ? "listening" : ""}`} onClick={() => listening ? stopVoiceRecognition() : setVoiceNoticeOpen(true)} disabled={busy} aria-label={listening ? "Остановить запись" : "Голосовой ввод"} title={listening ? "Остановить запись" : "Голосовой ввод"}>{listening ? "■" : <VoiceIcon />}</button>
           <button className="send-button" onClick={() => void send()} disabled={(!draft.trim() && attachments.length === 0) || busy} aria-label="Отправить"><span>↑</span></button>
         </div>
-        <div className="composer-meta"><span>{status}</span><span className="composer-meta-actions"><button className={`notification-toggle ${notifyOnComplete ? "enabled" : ""}`} onClick={() => void toggleCompletionNotifications()} title="Уведомить, когда задача завершится">{notifyOnComplete ? "Уведомления включены" : "Уведомлять о готовности"}</button><span>{modeLabel} · {mode === "offline" ? "Qwen 0.5B" : onlineModelReady === true ? "QQ AI Online · собственная модель" : onlineModelReady === false ? "QQ AI Online · пока без модели" : capabilitiesUnavailable ? "статус недоступен" : "проверка статуса"}{mode === "online" && attachments.length > 0 && " · вложения будут отправлены онлайн"}{mode === "online" && visionReady === false && " · Vision ещё не подключён"}</span></span></div>
+        <div className="composer-meta"><span>{status}</span><span className="composer-meta-actions"><button className={`notification-toggle ${notifyOnComplete ? "enabled" : ""}`} onClick={() => void toggleCompletionNotifications()} title="Уведомить, когда задача завершится">{notifyOnComplete ? "Уведомления включены" : "Уведомлять о готовности"}</button><span>{modeLabel} · {mode === "offline" ? "Локальная модель" : onlineModelReady === true ? "QQ AI Online · собственная модель" : onlineModelReady === false ? "QQ AI Online · пока без модели" : capabilitiesUnavailable ? "статус недоступен" : "проверка статуса"}{mode === "online" && attachments.length > 0 && " · вложения будут отправлены онлайн"}{mode === "online" && visionReady === false && " · Vision ещё не подключён"}</span></span></div>
       </footer>
     </section>
 
     {voiceNoticeOpen && <div className="modal-backdrop" onClick={() => setVoiceNoticeOpen(false)}><section className="modal" onClick={e => e.stopPropagation()}>
-      <button className="modal-close" onClick={() => setVoiceNoticeOpen(false)}>×</button><div className="modal-symbol">🎙</div><h2>Голосовой ввод</h2>
+      <button className="modal-close" onClick={() => setVoiceNoticeOpen(false)}>×</button><div className="modal-symbol"><VoiceIcon /></div><h2>Голосовой ввод</h2>
       <p>Браузер распознает речь и вставит расшифровку в поле сообщения. В зависимости от браузера аудио может обрабатываться его удалённым сервисом распознавания. Текст можно проверить и изменить до отправки QQ AI.</p>
       <button className="primary full" onClick={() => { setVoiceNoticeOpen(false); beginVoiceRecognition(); }}>Продолжить</button>
       <button className="secondary-button full" style={{marginTop:8}} onClick={() => setVoiceNoticeOpen(false)}>Отмена</button>
