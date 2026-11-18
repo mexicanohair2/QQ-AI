@@ -5,6 +5,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import { createClient, type Session } from "@supabase/supabase-js";
+import { calculateMathQuestion } from "./lib/math";
 
 type Message = { role: "user" | "assistant"; content: string };
 type Mode = "online" | "offline";
@@ -311,8 +312,24 @@ export default function App() {
     setDraft(""); setBusy(true); setError("");
     setStatus(mode === "online" ? "QQ AI подключается к облачной модели…" : "QQ AI думает локально…");
     try {
-      if (mode === "online") await sendOnline(next);
-      else await sendOffline(next);
+      const calculation = calculateMathQuestion(content);
+      if (calculation) {
+        setMessages([...next, { role: "assistant", content: calculation }]);
+        setStatus("Расчёт выполнен");
+        await notifyTaskComplete();
+        return;
+      }
+      if (mode === "online") {
+        try {
+          await sendOnline(next);
+        } catch (onlineError) {
+          if (!offlineReady || !engine.current) throw onlineError;
+          setStatus("Облачный ИИ недоступен — переключаемся на Qwen…");
+          await sendOffline(next);
+        }
+      } else {
+        await sendOffline(next);
+      }
       setStatus("Задача завершена");
       await notifyTaskComplete();
     } catch (e) {
