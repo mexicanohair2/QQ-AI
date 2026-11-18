@@ -258,3 +258,10 @@ test("vision gateway bounds upstream JSON and never relays provider error diagno
   const errorBranch = source.slice(source.indexOf("if (!upstream.ok)"), source.indexOf("let rawResult: string"));
   assert.doesNotMatch(errorBranch, /upstream\.status|detail|apiKey|Authorization|token/i);
 });
+
+test("chat and standalone search cancel failed upstream response bodies", async () => {
+  const chat = await readFile(new URL("../api/chat.ts", import.meta.url), "utf8");
+  const search = await readFile(new URL("../api/search.ts", import.meta.url), "utf8");
+  assert.match(chat, /if \(!response\.ok\) \{[\s\S]*?response\.body\?\.cancel\(\)/);
+  assert.match(search, /if \(!response\.ok\) \{[\s\S]*?response\.body\?\.cancel\(\)/);
+});
