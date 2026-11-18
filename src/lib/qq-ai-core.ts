@@ -154,6 +154,55 @@ export function parseDuckDuckGoResults(html: string, retrievedAt = new Date().to
   return results;
 }
 
+/** Merge independent search-engine result groups fairly, dropping unsafe and duplicate URLs. */
+export function mergeSearchResults(
+  groups: readonly (readonly QQSearchSource[])[],
+  limit = 8,
+): QQSearchSource[] {
+  const maximum = Number.isFinite(limit) ? Math.min(12, Math.max(1, Math.floor(limit))) : 8;
+  const cursors = groups.map(() => 0);
+  const seen = new Set<string>();
+  const merged: QQSearchSource[] = [];
+  let progressed = true;
+
+  while (merged.length < maximum && progressed) {
+    progressed = false;
+    for (let groupIndex = 0; groupIndex < groups.length && merged.length < maximum; groupIndex += 1) {
+      const group = groups[groupIndex];
+      let candidate: QQSearchSource | null = null;
+
+      while (cursors[groupIndex] < group.length) {
+        const source = group[cursors[groupIndex]++];
+        if (!source || typeof source.title !== "string" || typeof source.url !== "string") continue;
+        const url = normalizeSearchUrl(source.url);
+        if (!url || seen.has(url)) continue;
+
+        let domain: string;
+        try { domain = new URL(url).hostname.replace(/^www\\./i, ""); }
+        catch { continue; }
+        const title = plainText(source.title).slice(0, 180);
+        if (!title) continue;
+
+        candidate = {
+          title,
+          url,
+          domain,
+          retrievedAt: typeof source.retrievedAt === "string" ? source.retrievedAt : new Date().toISOString(),
+          excerpt: typeof source.excerpt === "string" ? plainText(source.excerpt).slice(0, 420) : "",
+        };
+        seen.add(url);
+        break;
+      }
+
+      if (candidate) {
+        merged.push(candidate);
+        progressed = true;
+      }
+    }
+  }
+
+  return merged;
+}
 export function buildSearchContext(sources: QQSearchSource[]): string {
   if (sources.length === 0) return "Поиск не вернул проверяемых результатов. Не выдумывай источники.";
   return [
