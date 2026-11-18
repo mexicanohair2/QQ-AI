@@ -81,7 +81,10 @@ export default async function handler(request: Request): Promise<Response> {
     try {
       const upstream = await fetch(safeEndpoint, {
         method: "POST",
-        headers: { Authorization: "Bearer " + apiKey, "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(apiKey ? { Authorization: "Bearer " + apiKey } : {}),
+        },
         body: JSON.stringify({
           model,
           messages: buildGameAiMessages(body.request),
