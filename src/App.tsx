@@ -215,7 +215,11 @@ export default function App() {
     if (busy || offlineReady) return;
     setBusy(true); setError(""); setProgress(0); setStatus("Проверяем поддержку WebGPU…");
     try {
-      if (!("gpu" in navigator)) throw new Error("В этом браузере нет WebGPU. Для офлайн-модели нужен совместимый браузер.");
+      const gpu = (navigator as Navigator & { gpu?: { requestAdapter: () => Promise<unknown> } }).gpu;
+      if (!gpu) throw new Error("В этом браузере нет WebGPU. Для локальной модели нужен совместимый браузер.");
+      setStatus("Проверяем графический адаптер…");
+      const adapter = await gpu.requestAdapter();
+      if (!adapter) throw new Error("Браузер не обнаружил совместимый графический адаптер WebGPU. Локальная модель на этом устройстве пока недоступна.");
       setStatus("Проверяем локальное хранилище модели…");
       const { CreateMLCEngine, prebuiltAppConfig } = await import("@mlc-ai/web-llm");
       const appConfig = { ...prebuiltAppConfig, cacheBackend: "indexeddb" as const };
