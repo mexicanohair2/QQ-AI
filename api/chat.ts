@@ -58,6 +58,21 @@ async function runSearch(query: string, signal: AbortSignal) {
   return parseDuckDuckGoResults(html);
 }
 
+function rejectCrossOrigin(request: Request): Response | null {
+  const origin = request.headers.get("origin");
+  const host = request.headers.get("host");
+  if (!origin || !host) return null;
+  try {
+    const parsed = new URL(origin);
+    if (parsed.host !== host || !["https:", "http:"].includes(parsed.protocol)) {
+      return json({ error: "Недопустимый источник запроса." }, 403);
+    }
+    return null;
+  } catch {
+    return json({ error: "Некорректный источник запроса." }, 403);
+  }
+}
+
 export default async function handler(request: Request): Promise<Response> {
   if (request.method !== "POST") return json({ error: "Метод не поддерживается." }, 405);
 
