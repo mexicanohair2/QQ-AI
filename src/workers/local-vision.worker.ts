@@ -39,11 +39,14 @@ async function loadModel(): Promise<void> {
   if (loadingPromise) return loadingPromise;
 
   loadingPromise = (async () => {
-    if (!("gpu" in navigator)) {
+    const gpu = (navigator as Navigator & {
+      gpu?: { requestAdapter: () => Promise<any> };
+    }).gpu;
+    if (!gpu) {
       throw new Error("В этом браузере нет WebGPU. Локальное зрение пока недоступно.");
     }
 
-    const adapter = await navigator.gpu.requestAdapter();
+    const adapter = await gpu.requestAdapter();
     if (!adapter) {
       throw new Error("Браузер не обнаружил графический адаптер WebGPU.");
     }
@@ -115,7 +118,7 @@ async function analyze(requestId: string, question: string, items: VisionItem[])
           text: "Кадр видео на отметке " + (items[index].timestampMs! / 1000).toFixed(2) + " секунды:",
         });
       }
-      content.push({ type: "image", image: items[index].dataUrl });
+      content.push({ type: "image", image: images[index] });
     }
 
     content.push({
