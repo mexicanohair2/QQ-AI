@@ -1,3 +1,4 @@
+import { readResponseTextLimited } from "../src/lib/bounded-response";
 import {
   buildSearchOnlyAnswer,
   parseDuckDuckGoResults,
@@ -51,8 +52,12 @@ export default async function handler(request: Request): Promise<Response> {
       },
     );
     if (!response.ok) return json({ error: "Поисковая система временно недоступна." }, 502);
-    const html = await response.text();
-    if (html.length > 2_500_000) return json({ error: "Поисковая выдача слишком большая." }, 502);
+    let html: string;
+    try {
+      html = await readResponseTextLimited(response, 2_500_000);
+    } catch {
+      return json({ error: "Поисковая выдача слишком большая." }, 502);
+    }
 
     const sources = parseDuckDuckGoResults(html);
     return json({
