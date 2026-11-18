@@ -14,7 +14,7 @@ Headers:
 - `Content-Type: application/json`
 - `Authorization: Bearer <Supabase access token>`
 
-The endpoint validates the Supabase session using the public Supabase Auth user endpoint. The Cerebras key remains server-side. No key is sent to QQCross.
+The endpoint validates the Supabase session using the public Supabase Auth user endpoint. The QQ AI model endpoint is configured server-side with `QQ_AI_API_URL`, `QQ_AI_MODEL`, and an optional `QQ_AI_API_KEY`. No key is sent to QQCross.
 
 ## Supported tasks
 
@@ -70,7 +70,7 @@ The model may only write clue text for the supplied answers. The validator check
 
 ## Current limitations
 
-- The endpoint requires a valid Supabase access token and a configured server-side `CEREBRAS_API_KEY`.
-- The current Cerebras integration is text-only. This endpoint does not provide image/video understanding or web search.
+- The endpoint requires a valid Supabase access token and a configured QQ AI online model (`QQ_AI_API_URL` and `QQ_AI_MODEL`). `QQ_AI_API_KEY` is optional for a public endpoint and remains server-side when used.
+- The game route uses the same QQ-owned online text model as the main assistant. It does not provide image/video understanding or web search inside game tasks.
 - No claim of availability is made until the required server environment variables are configured and a real authenticated request is tested.
 - This contract is independent of APK work. QQCross will be integrated later, after its client API and authorization flow are explicitly reviewed.
