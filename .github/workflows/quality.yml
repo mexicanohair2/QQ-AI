@@ -1,0 +1,74 @@
+name: QQ AI quality checks
+
+on:
+  pull_request:
+    branches: [prototype/phase-1-chat, main]
+  push:
+    branches: [prototype/phase-1-chat, feature/multimodal-search-voice, feature/qq-ai-online-core]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qq-ai-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Report dependency vulnerabilities (non-blocking)
+        run: |
+          npm ls vite @vitejs/plugin-react katex remark-math rehype-katex --all || true
+          npm audit --json > /tmp/qq-ai-npm-audit.json || true
+          node --input-type=module -e '
+            import fs from "node:fs";
+            try {
+              const report = JSON.parse(fs.readFileSync("/tmp/qq-ai-npm-audit.json", "utf8"));
+              console.log("Dependency audit summary:", JSON.stringify(report.metadata?.vulnerabilities ?? {}));
+              for (const [name, item] of Object.entries(report.vulnerabilities ?? {})) {
+                const advisories = (item.via ?? []).map(entry => typeof entry === "string" ? entry : ({
+                  name: entry.name, title: entry.title, range: entry.range, url: entry.url
+                }));
+                console.log(item.severity + ": " + name + "; range=" + item.range + "; fix=" + JSON.stringify(item.fixAvailable) + "; advisories=" + JSON.stringify(advisories));
+              }
+            } catch (error) {
+              console.log("Dependency audit unavailable:", String(error));
+            }
+          '
+      - name: Audit production dependencies separately
+        run: |
+          npm audit --omit=dev --json > /tmp/qq-ai-production-audit.json || true
+          node --input-type=module -e '
+            import fs from "node:fs";
+            try {
+              const report = JSON.parse(fs.readFileSync("/tmp/qq-ai-production-audit.json", "utf8"));
+              console.log("Production dependency audit summary:", JSON.stringify(report.metadata?.vulnerabilities ?? {}));
+              for (const [name, item] of Object.entries(report.vulnerabilities ?? {})) {
+                console.log("Production dependency issue: " + item.severity + " " + name);
+              }
+            } catch (error) {
+              console.log("Production dependency audit unavailable:", String(error));
+            }
+          '
+      - name: Check QQ AI benchmark runner syntax
+        run: node --check scripts/run-qq-ai-benchmark.mjs
+      - name: Validate QQ AI training-data safeguards
+        run: python3 tests/test_training_dataset_validator.py
+      - name: Validate QQCross game AI contracts
+        run: npm run test:game-ai
+      - name: Validate QQ AI online core contracts
+        run: npm run test:online-core
+      - name: Type check
+        run: npm run typecheck
+      - name: Production build
+        run: npm run build
