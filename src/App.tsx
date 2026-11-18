@@ -86,6 +86,28 @@ export default function App() {
   });
   const engine = useRef<any>(null);
   const bottom = useRef<HTMLDivElement>(null);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+
+  function handleTouchStart(event: React.TouchEvent<HTMLElement>) {
+    const touch = event.touches[0];
+    if (touch) touchStart.current = { x: touch.clientX, y: touch.clientY };
+  }
+
+  function handleTouchEnd(event: React.TouchEvent<HTMLElement>) {
+    const start = touchStart.current;
+    touchStart.current = null;
+    const touch = event.changedTouches[0];
+    if (!start || !touch || window.innerWidth > 650) return;
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    if (Math.abs(dx) < 65 || Math.abs(dx) < Math.abs(dy) * 1.35) return;
+
+    if (sidebarVisible && start.x <= 285 && dx < 0) {
+      setSidebarVisible(false);
+    } else if (!sidebarVisible && start.x <= 28 && dx > 0) {
+      setSidebarVisible(true);
+    }
+  }
 
   useEffect(() => {
     try { localStorage.setItem("qq-ai-sidebar-hidden", sidebarVisible ? "0" : "1"); }
@@ -377,7 +399,7 @@ export default function App() {
 
   const modeLabel = useMemo(() => mode === "online" ? "Онлайн" : "Офлайн", [mode]);
 
-  return <main className="shell">
+  return <main className="shell" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
     {sidebarVisible && <aside className="rail history-sidebar">
       <div className="sidebar-head">
         <button className="brand-mark" aria-label="QQ AI">QQ</button>
