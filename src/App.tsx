@@ -53,8 +53,8 @@ function remarkAnswerUnderline() {
 
 export default function App() {
   const [messages, setMessages] = useState<Message[]>(readMessages);
-  const [mode, setMode] = useState<Mode>("online");
-  const [status, setStatus] = useState("Онлайн-режим");
+  const [mode, setMode] = useState<Mode>("offline");
+  const [status, setStatus] = useState("Подготовьте офлайн-модель Qwen");
   const [progress, setProgress] = useState(0);
   const [busy, setBusy] = useState(false);
   const [notifyOnComplete, setNotifyOnComplete] = useState(() => {
