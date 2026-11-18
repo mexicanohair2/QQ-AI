@@ -19,6 +19,7 @@ export default async function handler(request: Request): Promise<Response> {
       state: "implemented_device_check_required",
       runtime: "WebGPU browser worker",
       model: "onnx-community/whisper-tiny",
+      dtype: "q8",
       languages: "multilingual; Russian transcription",
       estimatedDownloadMb: { min: 70, max: 90 },
       maxRecordingSeconds: 20,
