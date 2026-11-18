@@ -228,3 +228,13 @@ test("chat, search and vision routes no longer buffer request.text before enforc
     assert.doesNotMatch(source, /await request\.text\(\)/);
   }
 });
+
+
+test("chat gateway never relays unbounded or provider-internal error bodies to the browser", async () => {
+  const source = await readFile(new URL("../api/chat.ts", import.meta.url), "utf8");
+  const errorBranch = source.slice(source.indexOf("if (!upstream.ok)"), source.indexOf("if (!upstream.body)"));
+  assert.match(errorBranch, /upstream\.body\?\.cancel\(\)/);
+  assert.match(errorBranch, /MODEL_UPSTREAM_ERROR/);
+  assert.doesNotMatch(errorBranch, /upstream\.text\(\)|readResponseTextLimited/);
+  assert.doesNotMatch(errorBranch, /detail|Authorization|apiKey|token/i);
+});
