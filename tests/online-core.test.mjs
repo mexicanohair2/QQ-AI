@@ -557,7 +557,7 @@ test("memory enabled state persists locally alongside saved entries", async () =
   };
   assert.equal(readStoredMemoryEnabled(storage), null);
   assert.equal(persistStoredMemoryEnabled(true, storage), true);
-  assert.equal(values.get(MEMORY_ENABLED_STORAGE_KEY), "true");
+  assert.equal(JSON.parse(values.get(MEMORY_ENABLED_STORAGE_KEY)).enabled, true);
   assert.equal(readStoredMemoryEnabled(storage), true);
   assert.equal(persistStoredMemoryEnabled(false, storage), true);
   assert.equal(readStoredMemoryEnabled(storage), false);
