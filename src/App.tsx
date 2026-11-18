@@ -559,6 +559,10 @@ export default function App() {
     const selected = attachments;
     const content = draft.trim() || (selected.length ? (selected[0].kind === "video" ? "Проанализируй это видео по выбранным кадрам." : "Проанализируй прикреплённое изображение.") : "");
     if ((!content && selected.length === 0) || busy) return;
+    if (selected.length === 0 && mode === "offline" && !offlineReady) {
+      setError("Сначала нажми «Загрузить и запустить ИИ» и дождись завершения подготовки модели.");
+      return;
+    }
     if (selected.length > 0 && mode !== "online") {
       setError("Переключись в онлайн-режим: локальная модель не обрабатывает фото и видео.");
       return;
