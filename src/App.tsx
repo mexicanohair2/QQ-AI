@@ -68,6 +68,7 @@ export default function App() {
   const [offlineReady, setOfflineReady] = useState(false);
   const [onlineModelReady, setOnlineModelReady] = useState<boolean | null>(null);
   const [visionReady, setVisionReady] = useState<boolean | null>(null);
+  const [capabilitiesUnavailable, setCapabilitiesUnavailable] = useState(false);
   const [draft, setDraft] = useState("");
   const [attachments, setAttachments] = useState<MediaAttachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -143,8 +144,9 @@ export default function App() {
       if (!alive) return;
       setOnlineModelReady(data.onlineText?.state === "configured");
       setVisionReady(data.imageUnderstanding?.state === "configured");
+      setCapabilitiesUnavailable(false);
     }).catch(() => {
-      if (alive) { setOnlineModelReady(false); setVisionReady(false); }
+      if (alive) { setOnlineModelReady(null); setVisionReady(null); setCapabilitiesUnavailable(true); }
     });
     return () => { alive = false; };
   }, []);
@@ -675,7 +677,7 @@ export default function App() {
             <button className="primary" onClick={loadOfflineModel} disabled={busy}>{busy ? "Загрузка…" : "Загрузить модель"}</button>
             {busy && <div className="progress"><span style={{ width: progress + "%" }} /></div>}
           </div>}
-          <div className="welcome-foot"><span className="status-pulse" />{mode === "online" ? onlineModelReady === true ? "QQ AI Online · собственная модель подключена" : onlineModelReady === false ? "QQ AI Online · модель ещё не размещена; поиск доступен отдельно" : "Проверяем онлайн-модель…" : offlineReady ? "Локальная модель готова" : "Офлайн-модель ещё не загружена"}</div>
+          <div className="welcome-foot"><span className="status-pulse" />{mode === "online" ? capabilitiesUnavailable ? "Не удалось проверить статус моделей" : onlineModelReady === true ? "QQ AI Online · собственная модель подключена" : onlineModelReady === false ? "QQ AI Online · модель ещё не размещена; поиск доступен отдельно" : "Проверяем онлайн-модель…" : offlineReady ? "Локальная модель готова" : "Офлайн-модель ещё не загружена"}</div>
         </div> : <div className="conversation">
           {messages.map((m, i) => <article className={`message ${m.role}`} key={i}>
             <div className="message-avatar">{m.role === "assistant" ? <span>QQ</span> : "Вы"}</div>
@@ -709,7 +711,7 @@ export default function App() {
           <button className={`voice-button ${listening ? "listening" : ""}`} onClick={() => listening ? stopVoiceRecognition() : setVoiceNoticeOpen(true)} disabled={busy} aria-label={listening ? "Остановить запись" : "Голосовой ввод"} title={listening ? "Остановить запись" : "Голосовой ввод"}>{listening ? "■" : "🎙"}</button>
           <button className="send-button" onClick={() => void send()} disabled={(!draft.trim() && attachments.length === 0) || busy} aria-label="Отправить"><span>↑</span></button>
         </div>
-        <div className="composer-meta"><span>{status}</span><span className="composer-meta-actions"><button className={`notification-toggle ${notifyOnComplete ? "enabled" : ""}`} onClick={() => void toggleCompletionNotifications()} title="Уведомить, когда задача завершится">{notifyOnComplete ? "Уведомления включены" : "Уведомлять о готовности"}</button><span>{modeLabel} · {mode === "offline" ? "Qwen 0.5B" : onlineModelReady === true ? "QQ AI Online · собственная модель" : onlineModelReady === false ? "QQ AI Online · пока без модели" : "проверка статуса"}{mode === "online" && attachments.length > 0 && " · вложения будут отправлены онлайн"}{mode === "online" && visionReady === false && " · Vision ещё не подключён"}</span></span></div>
+        <div className="composer-meta"><span>{status}</span><span className="composer-meta-actions"><button className={`notification-toggle ${notifyOnComplete ? "enabled" : ""}`} onClick={() => void toggleCompletionNotifications()} title="Уведомить, когда задача завершится">{notifyOnComplete ? "Уведомления включены" : "Уведомлять о готовности"}</button><span>{modeLabel} · {mode === "offline" ? "Qwen 0.5B" : onlineModelReady === true ? "QQ AI Online · собственная модель" : onlineModelReady === false ? "QQ AI Online · пока без модели" : capabilitiesUnavailable ? "статус недоступен" : "проверка статуса"}{mode === "online" && attachments.length > 0 && " · вложения будут отправлены онлайн"}{mode === "online" && visionReady === false && " · Vision ещё не подключён"}</span></span></div>
       </footer>
     </section>
 
