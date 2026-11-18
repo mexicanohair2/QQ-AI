@@ -7,7 +7,7 @@ export default async function handler(request: Request): Promise<Response> {
     onlineText: { state: hasModel ? "configured" : "unconfigured", model: hasModel ? process.env.QQ_AI_MODEL : null },
     webSearch: { state: "available", provider: "DuckDuckGo HTML search", note: "Используются поисковые фрагменты; полное извлечение страниц ещё не подключено." },
     imageUnderstanding: { state: hasVision ? "configured" : "unconfigured" },
-    videoUnderstanding: { state: hasVision ? "pipeline_pending" : "unconfigured", note: "Извлечение видеокадров и анализ с временными метками ещё не подключены." },
+    videoUnderstanding: { state: hasVision ? "configured" : "unconfigured", note: "Кадры выбираются локально; аудиодорожка пока не анализируется." },
     offlineText: { state: "available", model: "Qwen2.5-0.5B-Instruct-q4f16_1-MLC" }
   };
   return new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
