@@ -328,7 +328,7 @@ export default function App() {
       setError("Выбери либо изображения, либо одно видео за раз.");
       return;
     }
-    const kind = videos.length ? "video" : "image";
+    const kind: MediaAttachment["kind"] = videos.length ? "video" : "image";
     if (attachments.length && attachments[0].kind !== kind) {
       setError("Сначала отправь или удали уже выбранные вложения.");
       return;
