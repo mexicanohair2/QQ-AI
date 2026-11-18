@@ -56,7 +56,7 @@ function VoiceIcon() {
 export default function App() {
   const [messages, setMessages] = useState<Message[]>(readChatMessages);
   const [mode, setMode] = useState<Mode>("offline");
-  const [status, setStatus] = useState("Проверяем доступность QQ AI Online…");
+  const [status, setStatus] = useState("Локальная модель ещё не загружена");
   const [progress, setProgress] = useState(0);
   const [busy, setBusy] = useState(false);
   const [notifyOnComplete, setNotifyOnComplete] = useState(() => {
@@ -708,7 +708,7 @@ export default function App() {
           <button className="history-open-button" onClick={() => void showHistory()}>История</button>
           <button className="cloud-pill" onClick={() => setAuthOpen(true)}><span className={session ? "cloud-dot connected" : "cloud-dot"} />{session ? "Облако" : "Синхронизация"}</button>
           <div className="mode-switch" aria-label="Режим работы">
-            <button className={mode === "online" ? "selected" : ""} onClick={() => { setMode("online"); setError(""); setStatus("QQ AI Online · облачный режим"); }}>Онлайн</button>
+            <button className={mode === "online" ? "selected" : ""} onClick={() => { setMode("online"); setError(""); setStatus(onlineModelReady === true ? "Облачная модель подключена" : "Облачная модель пока не подключена"); }}>Онлайн</button>
             <button className={mode === "offline" ? "selected" : ""} onClick={() => { setMode("offline"); setError(""); setStatus(offlineReady ? "Офлайн-модель готова" : "Сначала подготовь офлайн-модель"); }}>Офлайн</button>
           </div>
           <button className="icon-button" onClick={() => setSettingsOpen(true)} aria-label="Настройки">⚙</button>
@@ -720,7 +720,7 @@ export default function App() {
           <div className="welcome-orb"><span>QQ</span><i /></div>
           <div className="eyebrow">ЛИЧНЫЙ ИИ-ПОМОЩНИК</div>
           <h1>О чём <em>подумаем</em> сегодня?</h1>
-          <p className="welcome-copy">Задавай вопросы, исследуй идеи и создавай новое. Локальная модель отвечает прямо в браузере, а для актуальных тем может искать источники в интернете.</p>
+          <p className="welcome-copy">Задавай вопросы, исследуй идеи и создавай новое. После загрузки локальная модель сможет отвечать прямо в браузере, а для актуальных тем искать источники в интернете.</p>
           {mode === "online" && onlineModelReady === false && <div className="offline-card">
             <div><b>Онлайн-модель пока не подключена</b><small>Сейчас доступны интернет-поиск и локальная модель после загрузки. Можно перейти в офлайн-режим.</small></div>
             <button className="primary" onClick={() => { setMode("offline"); setStatus(offlineReady ? "Офлайн-модель готова" : "Сначала подготовь офлайн-модель"); }}>Открыть локальный режим</button>
