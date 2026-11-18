@@ -83,7 +83,8 @@ export default function App() {
   const speechRunRef = useRef(0);
   const recognitionRef = useRef<any>(null);
   const [authMessage, setAuthMessage] = useState("");
-  const [memoryEnabled, setMemoryEnabled] = useState(() => readStoredMemoryEnabled());
+  const [memoryEnabled, setMemoryEnabled] = useState(() => readStoredMemoryEnabled() ?? false);
+  const memoryPersistenceReadyRef = useRef(false);
   const [memoryDraft, setMemoryDraft] = useState("");
   const [memories, setMemories] = useState<string[]>(() => readStoredMemories());
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -129,6 +130,10 @@ export default function App() {
   }, [sidebarVisible]);
 
   useEffect(() => {
+    if (!memoryPersistenceReadyRef.current) {
+      memoryPersistenceReadyRef.current = true;
+      return;
+    }
     persistStoredMemories(memories);
     persistStoredMemoryEnabled(memoryEnabled);
   }, [memories, memoryEnabled]);
@@ -191,18 +196,17 @@ export default function App() {
         }
       }
       const localMemories = readStoredMemories();
+      const localMemoryEnabled = readStoredMemoryEnabled();
       const cloudMemories = normalizeMemoryEntries(prefsResult.data?.learned_preferences);
       const mergedMemories = normalizeMemoryEntries([...localMemories, ...cloudMemories]);
-      const memoryEnabledValue = prefsResult.data
-        ? Boolean(prefsResult.data.memory_enabled)
-        : readStoredMemoryEnabled();
+      const memoryEnabledValue = localMemoryEnabled ?? Boolean(prefsResult.data?.memory_enabled);
       setMemoryEnabled(memoryEnabledValue);
       setMemories(mergedMemories);
 
       setCloudStatus("Облако подключено");
       if (threadResult.error || prefsResult.error) {
         setCloudStatus("Облако подключено частично");
-      } else if (localMemories.length > 0 || memoryEnabledValue) {
+      } else if (prefsResult.data || localMemories.length > 0 || localMemoryEnabled !== null) {
         const cloudNeedsUpdate = !prefsResult.data ||
           JSON.stringify(mergedMemories) !== JSON.stringify(cloudMemories) ||
           memoryEnabledValue !== Boolean(prefsResult.data.memory_enabled);
