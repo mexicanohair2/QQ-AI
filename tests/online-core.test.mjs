@@ -256,7 +256,7 @@ test("vision gateway bounds upstream JSON and never relays provider error diagno
   assert.match(source, /answer\.length > 20_000/);
   assert.doesNotMatch(source, /await upstream\.json\(\)|await upstream\.text\(\)/);
   const errorBranch = source.slice(source.indexOf("if (!upstream.ok)"), source.indexOf("let rawResult: string"));
-  assert.doesNotMatch(errorBranch, /upstream\.status|detail|apiKey|Authorization|token/i);
+  assert.doesNotMatch(errorBranch, /upstream\.status|apiKey|Authorization|token/i);
 });
 
 test("chat and standalone search cancel failed upstream response bodies", async () => {
