@@ -9,8 +9,9 @@ import { calculateMathQuestion } from "./lib/math";
 import { dataUrlToBase64, prepareImage, sampleVideoFrames } from "./lib/media";
 import { shouldSearchWeb } from "./lib/qq-ai-core";
 import { readOpenAIChatStream } from "./lib/openai-stream";
+import { readChatMessages, type ChatMessage } from "./lib/chat-storage";
 
-type Message = { role: "user" | "assistant"; content: string; attachments?: Array<{ name: string; kind: "image" | "video" }> };
+type Message = ChatMessage;
 type MediaAttachment = { id: string; file: File; name: string; kind: "image" | "video"; previewUrl: string };
 type Mode = "online" | "offline";
 const MODEL_ID = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
@@ -20,13 +21,6 @@ const SYSTEM = `Ты QQ AI — полезный, честный и спокой�
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
 const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
-
-function readMessages(): Message[] {
-  try {
-    const value = JSON.parse(localStorage.getItem(CHAT_KEY) || "[]");
-    return Array.isArray(value) ? value.slice(-40) : [];
-  } catch { return []; }
-}
 
 function remarkAnswerUnderline() {
   return (tree: any) => {
@@ -56,7 +50,7 @@ function remarkAnswerUnderline() {
 }
 
 export default function App() {
-  const [messages, setMessages] = useState<Message[]>(readMessages);
+  const [messages, setMessages] = useState<Message[]>(readChatMessages);
   const [mode, setMode] = useState<Mode>("online");
   const [status, setStatus] = useState("Проверяем доступность QQ AI Online…");
   const [progress, setProgress] = useState(0);
@@ -337,6 +331,12 @@ export default function App() {
       setError("Фото и видео обрабатываются только в режиме QQ AI Online.");
       return;
     }
+    if (visionReady !== true) {
+      setError(visionReady === false
+        ? "Модуль анализа изображений и видео QQ AI ещё не подключён."
+        : "Сначала дождись проверки доступности модуля Vision.");
+      return;
+    }
     const videos = selected.filter(file => file.type.startsWith("video/"));
     const images = selected.filter(file => file.type.startsWith("image/"));
     if ((videos.length > 0 && images.length > 0) || videos.length + images.length !== selected.length) {
@@ -386,6 +386,7 @@ export default function App() {
   }
 
   async function sendVision(history: Message[], selected: MediaAttachment[]): Promise<string> {
+    if (visionReady !== true) throw new Error("Модуль анализа изображений и видео QQ AI ещё не подключён.");
     const question = [...history].reverse().find(message => message.role === "user")?.content || "Проанализируй вложение.";
     const isVideo = selected[0]?.kind === "video";
     let items: Array<{ mimeType: string; dataBase64: string; timestampMs?: number }>;
@@ -705,7 +706,7 @@ export default function App() {
         </div>}
         <div className="composer">
           <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm" multiple hidden onChange={handleFileSelection} />
-          <button className="attach-button" type="button" onClick={() => fileInputRef.current?.click()} disabled={busy || mode !== "online"} aria-label="Прикрепить фото или видео" title={mode === "online" ? "Прикрепить фото или видео" : "Медиа доступно в онлайн-режиме"}>＋</button>
+          <button className="attach-button" type="button" onClick={() => fileInputRef.current?.click()} disabled={busy || mode !== "online" || visionReady !== true} aria-label="Прикрепить фото или видео" title={mode !== "online" ? "Медиа доступно в онлайн-режиме" : visionReady === false ? "Модуль Vision пока не подключён" : visionReady === null ? "Проверяем доступность Vision" : "Прикрепить фото или видео"}>＋</button>
           <textarea value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }} placeholder={mode === "online" ? "Спросите о чём угодно…" : offlineReady ? "Сообщение для Qwen…" : "Можно посчитать пример или загрузить Qwen"} rows={1} disabled={busy} />
           <button className="search-button" type="button" onClick={() => void searchWeb()} disabled={!draft.trim() || attachments.length > 0 || busy} aria-label="Поиск в интернете" title="Искать запрос в интернете">⌕</button>
           <button className={`voice-button ${listening ? "listening" : ""}`} onClick={() => listening ? stopVoiceRecognition() : setVoiceNoticeOpen(true)} disabled={busy} aria-label={listening ? "Остановить запись" : "Голосовой ввод"} title={listening ? "Остановить запись" : "Голосовой ввод"}>{listening ? "■" : "🎙"}</button>
