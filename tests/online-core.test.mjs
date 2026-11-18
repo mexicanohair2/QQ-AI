@@ -136,3 +136,13 @@ test("OpenAI stream reader rejects empty and oversized responses", async () => {
   });
   await assert.rejects(() => readOpenAIChatStream(oversized, () => {}), /допустимый размер/);
 });
+
+
+test("chat gateway keeps its upstream timeout active for the lifetime of the response stream", async () => {
+  const source = await readFile(new URL("../api/chat.ts", import.meta.url), "utf8");
+  assert.match(source, /let streamingResponse = false/);
+  assert.match(source, /const responseBody = new ReadableStream/);
+  assert.match(source, /clearTimeout\(timeout\);[\s\S]*?streamController\.close\(\)/);
+  assert.match(source, /async cancel\(reason\)/);
+  assert.match(source, /if \(!streamingResponse\) clearTimeout\(timeout\)/);
+});
