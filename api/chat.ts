@@ -1,4 +1,4 @@
-import { readResponseTextLimited } from "../src/lib/bounded-response";
+import { readRequestTextLimited, readResponseTextLimited } from "../src/lib/bounded-response";
 import {
   buildSearchContext,
   parseDuckDuckGoResults,
@@ -96,8 +96,9 @@ export default async function handler(request: Request): Promise<Response> {
   let streamingResponse = false;
 
   try {
-    const raw = await request.text();
-    if (raw.length > 520_000) return json({ error: "Запрос слишком большой. Сократи историю диалога." }, 413);
+    let raw: string;
+    try { raw = await readRequestTextLimited(request, 520_000); }
+    catch { return json({ error: "Запрос слишком большой. Сократи историю диалога." }, 413); }
     let body: RequestBody;
     try { body = JSON.parse(raw) as RequestBody; }
     catch { return json({ error: "Некорректный JSON-запрос." }, 400); }
