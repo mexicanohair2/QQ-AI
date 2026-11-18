@@ -75,12 +75,16 @@ export function persistStoredMemories(value: unknown, storage?: MemoryStorage | 
   }
 }
 
-export function readStoredMemoryEnabled(storage?: MemoryStorage | null): boolean {
+export function readStoredMemoryEnabled(storage?: MemoryStorage | null): boolean | null {
   try {
     const target = storage ?? (typeof localStorage !== "undefined" ? localStorage : null);
-    return target?.getItem(MEMORY_ENABLED_STORAGE_KEY) === "true";
+    if (!target) return null;
+    const raw = target.getItem(MEMORY_ENABLED_STORAGE_KEY);
+    if (raw === "true") return true;
+    if (raw === "false") return false;
+    return null;
   } catch {
-    return false;
+    return null;
   }
 }
 
