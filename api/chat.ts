@@ -53,7 +53,10 @@ async function runSearch(query: string, signal: AbortSignal) {
       signal,
     },
   );
-  if (!response.ok) throw new Error("Поиск временно недоступен.");
+  if (!response.ok) {
+    try { await response.body?.cancel(); } catch { /* upstream may already be closed */ }
+    throw new Error("Поиск временно недоступен.");
+  }
   const html = await readResponseTextLimited(response, 2_500_000);
   return parseDuckDuckGoResults(html);
 }
