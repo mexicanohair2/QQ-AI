@@ -85,6 +85,7 @@ async function transcribe(requestId: string, samples: Float32Array) {
     if (!text) throw new Error("Не удалось разобрать речь. Попробуй записать фразу ещё раз.");
     post("transcript", { requestId, text, modelId: MODEL_ID, localOnly: true });
   } finally {
+    samples.fill(0);
     activeRequestId = null;
   }
 }
