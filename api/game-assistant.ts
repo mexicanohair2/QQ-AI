@@ -35,12 +35,12 @@ export default async function handler(request: Request): Promise<Response> {
   const apiKey = process.env.CEREBRAS_API_KEY?.trim();
   if (!apiKey) return json({ error: "Игровой ИИ пока не подключён: серверный провайдер не настроен." }, 503);
 
-  const declaredLength = Number(request.headers.get("content-length") || 0);
-  if (declaredLength > 12_000) return json({ error: "Запрос слишком большой." }, 413);
   if (!(await authenticate(request))) return json({ error: "Для игрового ИИ нужен действующий вход QQCross/QQ AI." }, 401);
 
   try {
-    const body = await request.json() as { request?: unknown };
+    const rawBody = await request.text();
+    if (rawBody.length > 12_000) return json({ error: "Запрос слишком большой." }, 413);
+    const body = JSON.parse(rawBody) as { request?: unknown };
     if (!validateGameAiRequest(body?.request)) return json({ error: "Некорректный запрос игрового ИИ." }, 400);
 
     const controller = new AbortController();
