@@ -106,3 +106,17 @@ test("search-only answer escapes untrusted Markdown titles", async () => {
   assert.ok(!answer.includes("](https://evil.example)"));
   assert.ok(answer.includes("](<https://safe.example/article>)"));
 });
+
+test("search-only answer renders snippets as text rather than Markdown links", async () => {
+  const { buildSearchOnlyAnswer } = await import("../src/lib/qq-ai-core.ts");
+  const answer = buildSearchOnlyAnswer([{
+    title: "Safe title",
+    url: "https://safe.example/article",
+    domain: "safe.example",
+    retrievedAt: "2026-11-18T12:00:00.000Z",
+    excerpt: "Фрагмент [переход](https://evil.example) и **подмена**",
+  }]);
+  assert.ok(answer.includes("\\[переход\\]\\(https://evil\\.example\\)"));
+  assert.ok(answer.includes("\\*\\*подмена\\*\\*"));
+  assert.ok(!answer.includes("](https://evil.example)"));
+});
