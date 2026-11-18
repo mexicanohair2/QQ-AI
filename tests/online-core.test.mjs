@@ -66,3 +66,11 @@ test("chat gateway rejects cross-origin browser requests", async () => {
   assert.match(source, /const originError = rejectCrossOrigin\(request\)/);
   assert.match(source, /Недопустимый источник запроса/);
 });
+
+test("QQCross Game AI uses the same QQ-owned online model gateway", async () => {
+  const source = await readFile(new URL("../api/game-assistant.ts", import.meta.url), "utf8");
+  assert.match(source, /QQ_AI_API_URL/);
+  assert.match(source, /QQ_AI_MODEL/);
+  assert.doesNotMatch(source, /CEREBRAS_API_KEY|api\.cerebras\.ai/);
+  assert.match(source, /authenticate\(request\)/);
+});
