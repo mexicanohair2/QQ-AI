@@ -1,5 +1,6 @@
 export const MAX_MEMORY_ITEMS = 20;
 export const MEMORY_STORAGE_KEY = "qq-ai-memory-v1";
+export const MEMORY_ENABLED_STORAGE_KEY = "qq-ai-memory-enabled-v1";
 
 type MemoryStorage = {
   getItem(key: string): string | null;
@@ -68,6 +69,26 @@ export function persistStoredMemories(value: unknown, storage?: MemoryStorage | 
     const target = storage ?? (typeof localStorage !== "undefined" ? localStorage : null);
     if (!target) return false;
     target.setItem(MEMORY_STORAGE_KEY, JSON.stringify(normalizeMemoryEntries(value)));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function readStoredMemoryEnabled(storage?: MemoryStorage | null): boolean {
+  try {
+    const target = storage ?? (typeof localStorage !== "undefined" ? localStorage : null);
+    return target?.getItem(MEMORY_ENABLED_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+export function persistStoredMemoryEnabled(enabled: boolean, storage?: MemoryStorage | null): boolean {
+  try {
+    const target = storage ?? (typeof localStorage !== "undefined" ? localStorage : null);
+    if (!target) return false;
+    target.setItem(MEMORY_ENABLED_STORAGE_KEY, enabled ? "true" : "false");
     return true;
   } catch {
     return false;
