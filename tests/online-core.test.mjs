@@ -25,10 +25,14 @@ test("web search is a separate real endpoint and is treated as untrusted evidenc
 
 test("capabilities distinguish actual online, search, vision, video and offline states", async () => {
   const source = await readFile(new URL("../api/capabilities.ts", import.meta.url), "utf8");
-  for (const key of ["onlineText", "webSearch", "imageUnderstanding", "videoUnderstanding", "offlineText"]) assert.ok(source.includes(key));
+  for (const key of ["onlineText", "webSearch", "imageUnderstanding", "localVision", "videoUnderstanding", "offlineText"]) assert.ok(source.includes(key));
   assert.match(source, /state: hasVision \? "configured" : "unconfigured"/);
   assert.match(source, /DuckDuckGo HTML \+ Bing HTML/);
   assert.match(source, /providers: \["DuckDuckGo", "Bing"\]/);
+  assert.match(source, /state: "implemented_device_check_required"/);
+  assert.match(source, /runtime: "WebGPU browser worker"/);
+  assert.match(source, /audioAnalysis: false/);
+  assert.match(source, /физический тест Honor 400 ещё не проведён/);
 });
 
 test("vision gateway validates request size, image MIME, timestamps and retention", async () => {
