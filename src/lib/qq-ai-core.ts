@@ -6,7 +6,7 @@ export type QQSearchSource = {
   excerpt: string;
 };
 
-const SEARCH_INTENT = /(?:\bнайди\b|\bнайти\b|\bпоищи\b|\bпоиск(?:ать)?\b|\bв интернете\b|\bисточники\b|\bссылки на\b|актуальн\w*|сегодня|прямо сейчас|последн\w*\s+(?:новост|событ|верси|данн|курс)|текущ\w*\s+(?:цен|курс|верси|погод|событ)|сколько стоит|курс валют|погода|расписани\w*|когда состоится)/iu;
+const SEARCH_INTENT = /(?:найди|найти|поищи|поиск(?:ать)?|в интернете|источники|ссылки на|актуальн\p{L}*|сегодня|прямо сейчас|последн\p{L}*\s+(?:новост|событ|верс|данн|курс)|текущ\p{L}*\s+(?:цен|курс|верс|погод|событ)|сколько стоит|курс валют|погод\p{L}*|расписани\p{L}*|когда состоится|latest|today|current|recent|news|price|weather|search|find online|sources)/iu;
 
 export function shouldSearchWeb(text: string): boolean {
   return SEARCH_INTENT.test(text.trim());
@@ -52,7 +52,6 @@ export function normalizeSearchUrl(rawValue: string): string | null {
     const host = url.hostname.toLowerCase();
     if (!host || host === "localhost" || host.endsWith(".local") || host.endsWith(".internal")) return null;
     if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host) || host.includes(":")) return null;
-    if (host === "example.com" || host === "example.org" || host === "example.net") return null;
     url.hash = "";
     return url.toString();
   } catch {

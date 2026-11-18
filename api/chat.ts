@@ -1,101 +1,154 @@
+import {
+  buildSearchContext,
+  parseDuckDuckGoResults,
+  shouldSearchWeb,
+} from "../src/lib/qq-ai-core";
+
 export const config = { runtime: "edge" };
 
-type ChatMessage = {
-  role: "system" | "user" | "assistant";
-  content: string;
-};
+type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+type RequestBody = { messages?: ChatMessage[]; webSearch?: boolean };
+
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
+  status,
+  headers: {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+  },
+});
+
+function safeModelEndpoint(raw: string): string | null {
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "https:" || url.username || url.password) return null;
+    const host = url.hostname.toLowerCase();
+    if (!host || host === "localhost" || host.endsWith(".local") || host.endsWith(".internal")) return null;
+    if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host) || host.includes(":")) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function validMessages(value: unknown): value is ChatMessage[] {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 40) return false;
+  return value.every((item) =>
+    item && typeof item === "object" &&
+    ["system", "user", "assistant"].includes((item as ChatMessage).role) &&
+    typeof (item as ChatMessage).content === "string" &&
+    (item as ChatMessage).content.length <= 12_000
+  );
+}
+
+async function runSearch(query: string, signal: AbortSignal) {
+  const response = await fetch(
+    "https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query.slice(0, 300)),
+    {
+      headers: {
+        "Accept": "text/html",
+        "User-Agent": "Mozilla/5.0 (compatible; QQAI/1.0; +https://github.com/mexicanohair2/QQ-AI)",
+      },
+      signal,
+    },
+  );
+  if (!response.ok) throw new Error("Поиск временно недоступен.");
+  const html = await response.text();
+  if (html.length > 2_500_000) throw new Error("Поисковая выдача слишком большая.");
+  return parseDuckDuckGoResults(html);
+}
 
 export default async function handler(request: Request): Promise<Response> {
-  const json = (body: unknown, status = 200) =>
-    new Response(JSON.stringify(body), {
-      status,
-      headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" },
-    });
+  if (request.method !== "POST") return json({ error: "Метод не поддерживается." }, 405);
 
-  if (request.method !== "POST") {
-    return json({ error: "Метод не поддерживается." }, 405);
-  }
+  const endpoint = process.env.QQ_AI_API_URL?.trim();
+  const model = process.env.QQ_AI_MODEL?.trim();
+  const apiKey = process.env.QQ_AI_API_KEY?.trim();
+  const safeEndpoint = endpoint ? safeModelEndpoint(endpoint) : null;
 
-  // Calls Cerebras directly. No Vercel AI Gateway or OIDC billing dependency.
-  // Keep this key in Vercel Environment Variables; never expose it to the browser.
-  const apiKey = process.env.CEREBRAS_API_KEY?.trim();
-  if (!apiKey) {
+  if (!endpoint || !model || !safeEndpoint) {
     return json({
-      error: "Облачная модель пока не подключена: на сервере QQ AI не задан CEREBRAS_API_KEY. Ключ должен быть добавлен взрослым владельцем проекта в защищённые переменные Vercel. Не отправляй API-ключ в чат.",
+      error: "Онлайн-модель QQ AI ещё не размещена. Серверный шлюз готов, но собственные веса модели пока не запущены на вычислительном сервере. Офлайн-Qwen работает отдельно.",
+      code: "ONLINE_MODEL_UNCONFIGURED",
     }, 503);
   }
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 55_000);
+
   try {
-    const body = await request.json() as { messages?: ChatMessage[] };
-    if (
-      !Array.isArray(body.messages) ||
-      body.messages.length === 0 ||
-      body.messages.length > 60 ||
-      body.messages.some((message) =>
-        !message ||
-        !["system", "user", "assistant"].includes(message.role) ||
-        typeof message.content !== "string" ||
-        message.content.length > 20000
-      )
-    ) {
-      return json({ error: "Некорректный формат диалога." }, 400);
+    const raw = await request.text();
+    if (raw.length > 520_000) return json({ error: "Запрос слишком большой. Сократи историю диалога." }, 413);
+    let body: RequestBody;
+    try { body = JSON.parse(raw) as RequestBody; }
+    catch { return json({ error: "Некорректный JSON-запрос." }, 400); }
+
+    if (!validMessages(body.messages)) return json({ error: "Некорректный формат диалога." }, 400);
+    const messages = body.messages.map(message => ({ role: message.role, content: message.content }));
+    const lastUser = [...messages].reverse().find(message => message.role === "user")?.content || "";
+    const needsSearch = body.webSearch === true || shouldSearchWeb(lastUser);
+    let sources = [];
+
+    if (needsSearch) {
+      try {
+        sources = await runSearch(lastUser, controller.signal);
+        messages.unshift({
+          role: "system",
+          content: sources.length
+            ? buildSearchContext(sources)
+            : "Для вопроса требовался веб-поиск, но доступных проверяемых результатов не найдено. Не утверждай, что поиск дал подтверждение; предупреди об ограничении.",
+        });
+      } catch {
+        messages.unshift({
+          role: "system",
+          content: "Веб-поиск для этого запроса временно не сработал. Не придумывай найденные страницы и честно предупреди, что не смог проверить актуальные данные.",
+        });
+      }
     }
 
-    const model = process.env.CEREBRAS_MODEL?.trim() || "zai-glm-4.7";
-    const upstream = await fetch("https://api.cerebras.ai/v1/chat/completions", {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (apiKey) headers.Authorization = "Bearer " + apiKey;
+
+    const upstream = await fetch(safeEndpoint, {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
+      headers,
+      signal: controller.signal,
       body: JSON.stringify({
         model,
-        messages: body.messages,
-        temperature: 0.8,
-        top_p: 0.95,
-        max_completion_tokens: 1800,
-        reasoning_effort: "none",
+        messages,
+        temperature: 0.7,
+        max_tokens: 2400,
         stream: true,
       }),
     });
 
     if (!upstream.ok) {
-      const upstreamText = await upstream.text().catch(() => "");
-      let detail = "";
-      try {
-        const parsed = JSON.parse(upstreamText);
-        const value = parsed.error?.message || parsed.message || parsed.error || "";
-        detail = typeof value === "string" ? value : JSON.stringify(value);
-      } catch {
-        detail = upstreamText.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-      }
-
-      let reason = "";
-      if (upstream.status === 401) reason = " Проверь CEREBRAS_API_KEY: ключ недействителен или отозван.";
-      else if (upstream.status === 402) reason = " Стартовые кредиты закончились; платное пополнение не выполнялось.";
-      else if (upstream.status === 429) reason = " Достигнут временный лимит запросов. Попробуй позже.";
-      else if (upstream.status === 403) reason = " Провайдер отклонил запрос из-за доступа или ограничений аккаунта.";
+      const detail = (await upstream.text().catch(() => ""))
+        .replace(/<[^>]*>/g, " ")
+        .replace(/\s+/g, " ")
+        .slice(0, 260);
       return json({
-        error: `Cerebras API ответил с кодом ${upstream.status}.${reason}${detail ? " Подробности: " + detail.slice(0, 400) : ""}`,
-      }, upstream.status);
+        error: "Собственная онлайн-модель QQ AI ответила с ошибкой " + upstream.status + (detail ? ". " + detail : ""),
+        code: "MODEL_UPSTREAM_ERROR",
+      }, 502);
     }
 
-    if (!upstream.body) {
-      return json({ error: "Cerebras API не вернул поток ответа." }, 502);
-    }
-
+    if (!upstream.body) return json({ error: "Онлайн-модель не вернула поток ответа." }, 502);
     return new Response(upstream.body, {
-      status: 200,
       headers: {
         "Content-Type": "text/event-stream; charset=utf-8",
         "Cache-Control": "no-cache, no-transform",
         "X-Accel-Buffering": "no",
+        "X-QQ-AI-Search-Used": sources.length ? "true" : "false",
+        "X-QQ-AI-Search-Count": String(sources.length),
       },
     });
   } catch (error) {
-    const detail = error instanceof Error ? error.message : "";
+    const timedOut = error instanceof Error && error.name === "AbortError";
     return json({
-      error: `Не удалось связаться с Cerebras API.${detail ? " " + detail.slice(0, 250) : ""}`,
-    }, 502);
+      error: timedOut ? "Превышено время ожидания онлайн-модели или поиска." : "Не удалось выполнить онлайн-запрос QQ AI.",
+    }, timedOut ? 504 : 502);
+  } finally {
+    clearTimeout(timeout);
   }
 }

@@ -6,8 +6,11 @@ import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import { createClient, type Session } from "@supabase/supabase-js";
 import { calculateMathQuestion } from "./lib/math";
+import { dataUrlToBase64, prepareImage, sampleVideoFrames } from "./lib/media";
+import { shouldSearchWeb } from "./lib/qq-ai-core";
 
-type Message = { role: "user" | "assistant"; content: string };
+type Message = { role: "user" | "assistant"; content: string; attachments?: Array<{ name: string; kind: "image" | "video" }> };
+type MediaAttachment = { id: string; file: File; name: string; kind: "image" | "video"; previewUrl: string };
 type Mode = "online" | "offline";
 const MODEL_ID = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
 const CHAT_KEY = "qq-ai-chat-v2";
@@ -53,8 +56,8 @@ function remarkAnswerUnderline() {
 
 export default function App() {
   const [messages, setMessages] = useState<Message[]>(readMessages);
-  const [mode, setMode] = useState<Mode>("offline");
-  const [status, setStatus] = useState("Подготовьте офлайн-модель Qwen");
+  const [mode, setMode] = useState<Mode>("online");
+  const [status, setStatus] = useState("Проверяем доступность QQ AI Online…");
   const [progress, setProgress] = useState(0);
   const [busy, setBusy] = useState(false);
   const [notifyOnComplete, setNotifyOnComplete] = useState(() => {
@@ -62,7 +65,11 @@ export default function App() {
     catch { return false; }
   });
   const [offlineReady, setOfflineReady] = useState(false);
+  const [onlineModelReady, setOnlineModelReady] = useState<boolean | null>(null);
+  const [visionReady, setVisionReady] = useState<boolean | null>(null);
   const [draft, setDraft] = useState("");
+  const [attachments, setAttachments] = useState<MediaAttachment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState("");
   const [session, setSession] = useState<Session | null>(null);
   const [email, setEmail] = useState("");
@@ -125,6 +132,21 @@ export default function App() {
     } catch { /* local storage may be unavailable */ }
     bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, threadId]);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/capabilities").then(async response => {
+      if (!response.ok) throw new Error("Статус QQ AI недоступен");
+      return response.json();
+    }).then(data => {
+      if (!alive) return;
+      setOnlineModelReady(data.onlineText?.state === "configured");
+      setVisionReady(data.imageUnderstanding?.state === "configured");
+    }).catch(() => {
+      if (alive) { setOnlineModelReady(false); setVisionReady(false); }
+    });
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => {
     if (!supabase) return;
@@ -222,6 +244,22 @@ export default function App() {
     } finally { setBusy(false); }
   }
 
+
+  async function sendSearchFallback(query: string): Promise<string> {
+    setStatus("QQ Search ищет актуальные страницы…");
+    const response = await fetch("/api/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || "QQ Search временно недоступен.");
+    if (typeof result.answer !== "string" || !result.answer.trim()) {
+      throw new Error("QQ Search не вернул результатов.");
+    }
+    return result.answer;
+  }
+
   async function sendOnline(history: Message[]) {
     const response = await fetch("/api/chat", {
       method: "POST",
@@ -273,6 +311,105 @@ export default function App() {
     }
     if (!answer.trim()) throw new Error("Офлайн-модель вернула пустой ответ.");
     return answer;
+  }
+
+
+  function handleFileSelection(event: React.ChangeEvent<HTMLInputElement>) {
+    const selected = Array.from(event.currentTarget.files ?? []);
+    event.currentTarget.value = "";
+    if (!selected.length) return;
+    if (mode !== "online") {
+      setError("Фото и видео обрабатываются только в режиме QQ AI Online.");
+      return;
+    }
+    const videos = selected.filter(file => file.type.startsWith("video/"));
+    const images = selected.filter(file => file.type.startsWith("image/"));
+    if ((videos.length > 0 && images.length > 0) || videos.length + images.length !== selected.length) {
+      setError("Выбери либо изображения, либо одно видео за раз.");
+      return;
+    }
+    const kind: MediaAttachment["kind"] = videos.length ? "video" : "image";
+    if (attachments.length && attachments[0].kind !== kind) {
+      setError("Сначала отправь или удали уже выбранные вложения.");
+      return;
+    }
+    if (kind === "video" && (videos.length !== 1 || attachments.length > 0)) {
+      setError("За один запрос можно прикрепить одно видео.");
+      return;
+    }
+    if (kind === "image" && attachments.length + images.length > 3) {
+      setError("Можно прикрепить не более трёх изображений.");
+      return;
+    }
+    const valid = selected.filter(file => {
+      if (kind === "image") {
+        const supported = ["image/jpeg", "image/png", "image/webp"].includes(file.type);
+        if (!supported) setError("Поддерживаются изображения JPEG, PNG и WebP.");
+        else if (file.size > 12 * 1024 * 1024) setError("Изображение больше 12 МБ.");
+        return supported && file.size <= 12 * 1024 * 1024;
+      }
+      const supported = ["video/mp4", "video/webm"].includes(file.type);
+      if (!supported) setError("Поддерживаются видео MP4 и WebM.");
+      else if (file.size > 30 * 1024 * 1024) setError("Видео больше 30 МБ.");
+      return supported && file.size <= 30 * 1024 * 1024;
+    });
+    if (!valid.length) return;
+    setAttachments(current => [...current, ...valid.map(file => ({
+      id: crypto.randomUUID(),
+      file,
+      name: file.name,
+      kind,
+      previewUrl: URL.createObjectURL(file),
+    }))]);
+    setError("");
+  }
+
+  function removeAttachment(id: string) {
+    const item = attachments.find(attachment => attachment.id === id);
+    if (item) URL.revokeObjectURL(item.previewUrl);
+    setAttachments(current => current.filter(attachment => attachment.id !== id));
+  }
+
+  async function sendVision(history: Message[], selected: MediaAttachment[]): Promise<string> {
+    const question = [...history].reverse().find(message => message.role === "user")?.content || "Проанализируй вложение.";
+    const isVideo = selected[0]?.kind === "video";
+    let items: Array<{ mimeType: string; dataBase64: string; timestampMs?: number }>;
+    const task: "image" | "video_frames" = isVideo ? "video_frames" : "image";
+
+    if (isVideo) {
+      setStatus("QQ AI выбирает кадры видео прямо на устройстве…");
+      const frames = await sampleVideoFrames(selected[0].file);
+      items = frames.map(frame => ({
+        mimeType: frame.mimeType,
+        dataBase64: dataUrlToBase64(frame.dataUrl),
+        timestampMs: frame.timestampMs,
+      }));
+    } else {
+      setStatus("QQ AI подготавливает изображения…");
+      const prepared = await Promise.all(selected.map(item => prepareImage(item.file)));
+      items = prepared.map(image => ({
+        mimeType: image.mimeType,
+        dataBase64: dataUrlToBase64(image.dataUrl),
+      }));
+    }
+
+    setStatus(isVideo ? "QQ AI анализирует выбранные кадры…" : "QQ AI анализирует изображение…");
+    const response = await fetch("/api/vision", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task, question, items }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || "Модуль визуального анализа QQ AI пока не подключён.");
+    if (typeof result.answer !== "string" || !result.answer.trim()) {
+      throw new Error("QQ AI не получил текстовый ответ от визуального модуля.");
+    }
+    if (isVideo && Array.isArray(result.analyzedFrames)) {
+      return result.answer + "\n\nПроанализированы кадры с временными отметками: " +
+        result.analyzedFrames.map((time: number) => (time / 1000).toFixed(1) + " с").join(", ") +
+        ". Аудиодорожка не анализировалась.";
+    }
+    return result.answer;
   }
 
   function beginVoiceRecognition() {
@@ -350,30 +487,41 @@ export default function App() {
   }
 
   async function send() {
-    const content = draft.trim();
-    if (!content || busy) return;
-    const next = [...messages, { role: "user" as const, content }];
+    const selected = attachments;
+    const content = draft.trim() || (selected.length ? (selected[0].kind === "video" ? "Проанализируй это видео по выбранным кадрам." : "Проанализируй прикреплённое изображение.") : "");
+    if ((!content && selected.length === 0) || busy) return;
+    if (selected.length > 0 && mode !== "online") {
+      setError("Переключись на QQ AI Online: локальная Qwen не обрабатывает фото и видео.");
+      return;
+    }
+    const attachmentInfo = selected.map(item => ({ name: item.name, kind: item.kind }));
+    const next = [...messages, { role: "user" as const, content, ...(attachmentInfo.length ? { attachments: attachmentInfo } : {}) }];
     setMessages([...next, { role: "assistant", content: "" }]);
     setDraft(""); setBusy(true); setError("");
-    setStatus(mode === "online" ? "QQ AI подключается к облачной модели…" : "QQ AI думает локально…");
+    setStatus(selected.length ? "QQ AI подготавливает вложения…" : mode === "online" ? "QQ AI подключается к облачной модели…" : "QQ AI думает локально…");
     try {
-      const calculation = calculateMathQuestion(content);
-      if (calculation) {
-        setMessages([...next, { role: "assistant", content: calculation }]);
-        setStatus("Расчёт выполнен");
-        await notifyTaskComplete();
-        return;
-      }
-      if (mode === "online") {
-        try {
-          await sendOnline(next);
-        } catch (onlineError) {
-          if (!offlineReady || !engine.current) throw onlineError;
-          setStatus("Облачный ИИ недоступен — переключаемся на Qwen…");
-          await sendOffline(next);
-        }
+      if (selected.length > 0) {
+        const answer = await sendVision(next, selected);
+        setMessages([...next, { role: "assistant", content: answer }]);
+        selected.forEach(item => URL.revokeObjectURL(item.previewUrl));
+        setAttachments(current => current.filter(item => !selected.some(sent => sent.id === item.id)));
       } else {
-        await sendOffline(next);
+        const calculation = calculateMathQuestion(content);
+        if (calculation) {
+          setMessages([...next, { role: "assistant", content: calculation }]);
+          setStatus("Расчёт выполнен");
+          await notifyTaskComplete();
+          return;
+        }
+        if (mode === "online") {
+          try {
+            await sendOnline(next);
+          } catch (onlineError) {
+            if (!shouldSearchWeb(content)) throw onlineError;
+            const searchAnswer = await sendSearchFallback(content);
+            setMessages([...next, { role: "assistant", content: searchAnswer }]);
+          }
+        } else await sendOffline(next);
       }
       setStatus("Задача завершена");
       await notifyTaskComplete();
@@ -487,7 +635,7 @@ export default function App() {
           <button className="history-open-button" onClick={() => void showHistory()}>История</button>
           <button className="cloud-pill" onClick={() => setAuthOpen(true)}><span className={session ? "cloud-dot connected" : "cloud-dot"} />{session ? "Облако" : "Синхронизация"}</button>
           <div className="mode-switch" aria-label="Режим работы">
-            <button className={mode === "online" ? "selected" : ""} onClick={() => { setMode("online"); setError(""); setStatus("Онлайн-режим"); }}>Онлайн</button>
+            <button className={mode === "online" ? "selected" : ""} onClick={() => { setMode("online"); setError(""); setStatus("QQ AI Online · облачный режим"); }}>Онлайн</button>
             <button className={mode === "offline" ? "selected" : ""} onClick={() => { setMode("offline"); setError(""); setStatus(offlineReady ? "Офлайн-модель готова" : "Сначала подготовь офлайн-модель"); }}>Офлайн</button>
           </div>
           <button className="icon-button" onClick={() => setSettingsOpen(true)} aria-label="Настройки">⚙</button>
@@ -510,11 +658,12 @@ export default function App() {
             <button className="primary" onClick={loadOfflineModel} disabled={busy}>{busy ? "Загрузка…" : "Загрузить модель"}</button>
             {busy && <div className="progress"><span style={{ width: progress + "%" }} /></div>}
           </div>}
-          <div className="welcome-foot"><span className="status-pulse" />{mode === "online" ? "Облачный режим · ответы через интернет" : offlineReady ? "Локальная модель готова" : "Офлайн-модель ещё не загружена"}</div>
+          <div className="welcome-foot"><span className="status-pulse" />{mode === "online" ? onlineModelReady === true ? "QQ AI Online · собственная модель подключена" : onlineModelReady === false ? "QQ AI Online · модель ещё не размещена; поиск доступен отдельно" : "Проверяем онлайн-модель…" : offlineReady ? "Локальная модель готова" : "Офлайн-модель ещё не загружена"}</div>
         </div> : <div className="conversation">
           {messages.map((m, i) => <article className={`message ${m.role}`} key={i}>
             <div className="message-avatar">{m.role === "assistant" ? <span>QQ</span> : "Вы"}</div>
             <div className="message-body"><div className="sender">{m.role === "assistant" ? "QQ AI" : "Вы"}</div>
+              {m.attachments?.length ? <div className="message-attachment-labels">{m.attachments.map((item, index) => <span key={index}>{item.kind === "video" ? "▶" : "▧"} {item.name}</span>)}</div> : null}
               <div className={`bubble ${m.role === "assistant" ? "markdown-body" : "user-text"}`}>{m.content ? (m.role === "assistant" ? <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkAnswerUnderline]} rehypePlugins={[rehypeKatex]}>{m.content}</ReactMarkdown> : m.content) : (busy ? <span className="typing"><i/><i/><i/></span> : "")}</div>
               {m.role === "assistant" && m.content && <div className="feedback"><button title="Полезный ответ" onClick={() => void rateAnswer(1)}>↑</button><button title="Неудачный ответ" onClick={() => void rateAnswer(-1)}>↓</button><small>Оценить ответ</small></div>}
             </div>
@@ -527,12 +676,22 @@ export default function App() {
       {mode === "offline" && !offlineReady && messages.length > 0 && <div className="offline-inline"><span>Офлайн-модель не загружена</span><button onClick={loadOfflineModel} disabled={busy}>Подготовить</button>{busy && <span>{progress}%</span>}</div>}
       {busy && <div className="task-running"><span className="task-running-dot" /><span><b>QQ AI выполняет задачу</b><small>Можно переключиться на другую вкладку. Не закрывай браузер, пока ответ не готов.</small></span></div>}
       <footer className="composer-area">
+        {attachments.length > 0 && <div className="attachment-tray">
+          {attachments.map(item => <div className="attachment-preview" key={item.id}>
+            {item.kind === "image" ? <img src={item.previewUrl} alt={item.name} /> : <video src={item.previewUrl} muted playsInline />}
+            <span title={item.name}>{item.name}</span>
+            <button type="button" onClick={() => removeAttachment(item.id)} disabled={busy} aria-label={"Удалить " + item.name}>×</button>
+          </div>)}
+          <div className="attachment-note">Файлы отправятся только после нажатия «Отправить». Для видео передаются отдельные кадры, не исходный ролик.</div>
+        </div>}
         <div className="composer">
+          <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm" multiple hidden onChange={handleFileSelection} />
+          <button className="attach-button" type="button" onClick={() => fileInputRef.current?.click()} disabled={busy || mode !== "online"} aria-label="Прикрепить фото или видео" title={mode === "online" ? "Прикрепить фото или видео" : "Медиа доступно в онлайн-режиме"}>＋</button>
           <textarea value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }} placeholder={mode === "online" ? "Спросите о чём угодно…" : offlineReady ? "Сообщение для Qwen…" : "Можно посчитать пример или загрузить Qwen"} rows={1} disabled={busy} />
           <button className={`voice-button ${listening ? "listening" : ""}`} onClick={() => listening ? stopVoiceRecognition() : setVoiceNoticeOpen(true)} disabled={busy} aria-label={listening ? "Остановить запись" : "Голосовой ввод"} title={listening ? "Остановить запись" : "Голосовой ввод"}>{listening ? "■" : "🎙"}</button>
-          <button className="send-button" onClick={() => void send()} disabled={!draft.trim() || busy} aria-label="Отправить"><span>↑</span></button>
+          <button className="send-button" onClick={() => void send()} disabled={(!draft.trim() && attachments.length === 0) || busy} aria-label="Отправить"><span>↑</span></button>
         </div>
-        <div className="composer-meta"><span>{status}</span><span className="composer-meta-actions"><button className={`notification-toggle ${notifyOnComplete ? "enabled" : ""}`} onClick={() => void toggleCompletionNotifications()} title="Уведомить, когда задача завершится">{notifyOnComplete ? "Уведомления включены" : "Уведомлять о готовности"}</button><span>{modeLabel} · {mode === "offline" ? "Qwen 0.5B" : "Cerebras GLM 4.7 · облачная модель"}</span></span></div>
+        <div className="composer-meta"><span>{status}</span><span className="composer-meta-actions"><button className={`notification-toggle ${notifyOnComplete ? "enabled" : ""}`} onClick={() => void toggleCompletionNotifications()} title="Уведомить, когда задача завершится">{notifyOnComplete ? "Уведомления включены" : "Уведомлять о готовности"}</button><span>{modeLabel} · {mode === "offline" ? "Qwen 0.5B" : onlineModelReady === true ? "QQ AI Online · собственная модель" : onlineModelReady === false ? "QQ AI Online · пока без модели" : "проверка статуса"}{mode === "online" && attachments.length > 0 && " · вложения будут отправлены онлайн"}{mode === "online" && visionReady === false && " · Vision ещё не подключён"}</span></span></div>
       </footer>
     </section>
 

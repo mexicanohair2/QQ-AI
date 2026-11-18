@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b",
-    "test:game-ai": "node --experimental-strip-types --test tests/qqcross-ai.test.mjs"
+    "test:game-ai": "node --experimental-strip-types --test tests/qqcross-ai.test.mjs",
+    "test:online-core": "node --experimental-strip-types --test tests/online-core.test.mjs tests/qq-ai-core.test.mjs"
   },
   "dependencies": {
     "@mlc-ai/web-llm": "0.2.88",

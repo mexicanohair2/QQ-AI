@@ -261,3 +261,53 @@ body{
 .voice-button:hover:not(:disabled){transform:translateY(-2px);border-color:#d4a0c5a8;background:linear-gradient(140deg,#693b57,#4a345e)}
 .voice-button.listening{color:#fff0f5;background:linear-gradient(140deg,#a85d79,#79518c);border-color:#e5a9c8;box-shadow:0 0 0 3px #c77fa52b,0 0 18px #b65f8a55}
 .voice-button:disabled{opacity:.4}
+
+/* QQ AI Online — attachment previews */
+.attach-button{
+  width:39px;height:39px;flex:none;display:grid;place-items:center;
+  border:1px solid #c18aa54d;border-radius:13px;
+  background:linear-gradient(140deg,#38263c,#2d223e);
+  color:#e6c1d5;font-size:24px;line-height:1;
+  transition:transform .2s,border-color .2s,background .2s;
+}
+.attach-button:hover:not(:disabled){transform:translateY(-2px);border-color:#d4a0c5a8;background:linear-gradient(140deg,#693b57,#4a345e)}
+.attach-button:disabled{opacity:.35}
+.attachment-tray{
+  display:flex;flex-wrap:wrap;align-items:flex-start;gap:9px;
+  max-width:850px;margin:0 auto 9px;padding:0 4px;
+}
+.attachment-preview{
+  position:relative;display:flex;align-items:center;gap:8px;
+  max-width:min(250px,72vw);padding:6px 34px 6px 6px;
+  border:1px solid #c18aa54d;border-radius:12px;
+  background:linear-gradient(135deg,#2b192b,#24182c);
+}
+.attachment-preview img,.attachment-preview video{
+  width:45px;height:45px;flex:none;object-fit:cover;
+  border-radius:8px;background:#100d19;
+}
+.attachment-preview span{
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  color:#e8d9e7;font-size:10px;
+}
+.attachment-preview button{
+  position:absolute;right:6px;top:50%;transform:translateY(-50%);
+  width:24px;height:24px;border:1px solid #ffffff18;border-radius:8px;
+  background:#ffffff08;color:#e6c1d5;font-size:18px;line-height:1;
+}
+.attachment-preview button:disabled{opacity:.35}
+.attachment-note{flex-basis:100%;color:#a995aa;font-size:9px;line-height:1.45;padding-left:3px}
+.message-attachment-labels{
+  display:flex;flex-wrap:wrap;justify-content:flex-end;gap:5px;margin:0 0 6px;
+}
+.message-attachment-labels span{
+  max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  border:1px solid #c18aa533;border-radius:8px;padding:4px 7px;
+  background:#6b3a5425;color:#dcb8cd;font-size:9px;
+}
+@media(max-width:650px){
+  .attach-button,.voice-button{width:35px;height:35px;border-radius:11px}
+  .attachment-preview{max-width:calc(100vw - 45px)}
+  .attachment-preview img,.attachment-preview video{width:39px;height:39px}
+  .attachment-note{font-size:8px}
+}
