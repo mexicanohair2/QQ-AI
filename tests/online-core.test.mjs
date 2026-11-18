@@ -547,3 +547,18 @@ test("saved preferences persist locally and recover safely from corrupt storage"
   assert.deepEqual(readStoredMemories(unavailable), []);
   assert.equal(persistStoredMemories(["test"], unavailable), false);
 });
+
+test("memory enabled state persists locally alongside saved entries", async () => {
+  const { readStoredMemoryEnabled, persistStoredMemoryEnabled, MEMORY_ENABLED_STORAGE_KEY } = await import("../src/lib/user-memory.ts");
+  const values = new Map();
+  const storage = {
+    getItem(key) { return values.has(key) ? values.get(key) : null; },
+    setItem(key, value) { values.set(key, value); },
+  };
+  assert.equal(readStoredMemoryEnabled(storage), false);
+  assert.equal(persistStoredMemoryEnabled(true, storage), true);
+  assert.equal(values.get(MEMORY_ENABLED_STORAGE_KEY), "true");
+  assert.equal(readStoredMemoryEnabled(storage), true);
+  assert.equal(persistStoredMemoryEnabled(false, storage), true);
+  assert.equal(readStoredMemoryEnabled(storage), false);
+});
