@@ -177,7 +177,10 @@ export default function App() {
     supabase.auth.getSession().then(({ data }) => {
       if (alive) setSession(data.session);
     });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, next) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, next) => {
+      if (event === "SIGNED_IN" || event === "SIGNED_OUT" || event === "USER_UPDATED") {
+        setCloudLoaded(false);
+      }
       setSession(next);
     });
     return () => { alive = false; listener.subscription.unsubscribe(); };
@@ -677,6 +680,10 @@ export default function App() {
     const selected = attachments;
     const content = draft.trim() || (selected.length ? (selected[0].kind === "video" ? "Проанализируй это видео по выбранным кадрам." : "Проанализируй прикреплённое изображение.") : "");
     if ((!content && selected.length === 0) || busy) return;
+    if (supabase && session?.user && !cloudLoaded) {
+      setError("QQ AI синхронизирует данные аккаунта. Подожди окончания загрузки и повтори отправку.");
+      return;
+    }
     if (selected.length === 0 && mode === "offline" && !offlineReady) {
       setError("Сначала нажми «Загрузить и запустить ИИ» и дождись завершения подготовки модели.");
       return;
