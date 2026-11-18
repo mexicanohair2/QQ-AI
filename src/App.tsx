@@ -1,9 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type TouchEvent as ReactTouchEvent } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
-import rehypeKatex from "rehype-katex";
-import "katex/dist/katex.min.css";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type TouchEvent as ReactTouchEvent } from "react";
+const MarkdownMessage = lazy(() => import("./components/MarkdownMessage"));
 import { createClient, type Session } from "@supabase/supabase-js";
 import { calculateMathQuestion } from "./lib/math";
 import { dataUrlToBase64, prepareImage, sampleVideoFrames } from "./lib/media";
@@ -20,37 +16,6 @@ const SYSTEM = `Ты QQ AI — полезный, честный и спокой�
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
 const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
-
-function remarkAnswerUnderline() {
-  return (tree: any) => {
-    const visit = (node: any): void => {
-      if (!Array.isArray(node.children)) return;
-      const next: any[] = [];
-      for (const child of node.children) {
-        if (child.type === "text" && typeof child.value === "string" && child.value.includes("==")) {
-          const parts = child.value.split(/==(.*?)==/g);
-          parts.forEach((part: string, index: number) => {
-            if (!part) return;
-            if (index % 2 === 1) {
-              next.push({ type: "strong", data: { hProperties: { className: ["answer-underline"] } }, children: [{ type: "text", value: part }] });
-            } else {
-              next.push({ type: "text", value: part });
-            }
-          });
-        } else {
-          visit(child);
-          next.push(child);
-        }
-      }
-      node.children = next;
-    };
-    visit(tree);
-  };
-}
-
-function VoiceIcon() {
-  return <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="2.5" width="6" height="12" rx="3" /><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.5M8.5 21.5h7" /></svg>;
-}
 
 export default function App() {
   const [messages, setMessages] = useState<Message[]>(() => readChatMessages(undefined, "anonymous"));
@@ -921,7 +886,7 @@ export default function App() {
             <div className="message-avatar">{m.role === "assistant" ? <span>QQ</span> : "Вы"}</div>
             <div className="message-body"><div className="sender">{m.role === "assistant" ? "QQ AI" : "Вы"}</div>
               {m.attachments?.length ? <div className="message-attachment-labels">{m.attachments.map((item, index) => <span key={index}>{item.kind === "video" ? "▶" : "▧"} {item.name}</span>)}</div> : null}
-              <div className={`bubble ${m.role === "assistant" ? "markdown-body" : "user-text"}`}>{m.content ? (m.role === "assistant" ? <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkAnswerUnderline]} rehypePlugins={[rehypeKatex]}>{m.content}</ReactMarkdown> : m.content) : (busy ? <span className="typing"><i/><i/><i/></span> : "")}</div>
+              <div className={`bubble ${m.role === "assistant" ? "markdown-body" : "user-text"}`}>{m.content ? (m.role === "assistant" ? <Suspense fallback={<span>{m.content}</span>}><MarkdownMessage content={m.content} /></Suspense> : m.content) : (busy ? <span className="typing"><i/><i/><i/></span> : "")}</div>
               {m.role === "assistant" && m.content && <div className="feedback"><button className={`speak-button ${speakingMessageIndex === i ? "active" : ""}`} title={speakingMessageIndex === i ? "Остановить озвучивание" : "Озвучить ответ"} aria-label={speakingMessageIndex === i ? "Остановить озвучивание" : "Озвучить ответ"} aria-pressed={speakingMessageIndex === i} disabled={busy && i === messages.length - 1} onClick={() => speakMessage(m.content, i)}>{speakingMessageIndex === i ? "Стоп" : "Озвучить"}</button><button title="Полезный ответ" onClick={() => void rateAnswer(1)}>↑</button><button title="Неудачный ответ" onClick={() => void rateAnswer(-1)}>↓</button><small>Оценить ответ</small></div>}
             </div>
           </article>)}
