@@ -88,3 +88,50 @@ test("manual QQ Search works independently of the online generation model", asyn
   assert.match(app, /aria-label="Поиск в интернете"/);
   assert.match(app, /disabled=\{!draft\.trim\(\) \|\| attachments\.length > 0 \|\| busy\}/);
 });
+
+
+test("OpenAI stream reader handles split CRLF events and a final event without a blank-line terminator", async () => {
+  const { readOpenAIChatStream } = await import("../src/lib/openai-stream.ts");
+  const encoder = new TextEncoder();
+  const chunks = [
+    "data: {\"choices\":[{\"delta\":{\"content\":\"Прив\"}}]}\\r",
+    "\\n\\r\\ndata: {\"choices\":[{\"delta\":{\"content\":\"ет\"}}]}",
+  ];
+  const body = new ReadableStream({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+      controller.close();
+    },
+  });
+  const received = [];
+  const answer = await readOpenAIChatStream(body, token => received.push(token));
+  assert.equal(answer, "Привет");
+  assert.deepEqual(received, ["Прив", "ет"]);
+});
+
+test("OpenAI stream reader accepts a non-streaming compatible JSON response", async () => {
+  const { readOpenAIChatStream } = await import("../src/lib/openai-stream.ts");
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(JSON.stringify({
+        choices: [{ message: { content: "Обычный JSON-ответ" } }],
+      })));
+      controller.close();
+    },
+  });
+  assert.equal(await readOpenAIChatStream(body, () => {}), "Обычный JSON-ответ");
+});
+
+test("OpenAI stream reader rejects empty and oversized responses", async () => {
+  const { readOpenAIChatStream } = await import("../src/lib/openai-stream.ts");
+  const empty = new ReadableStream({ start(controller) { controller.close(); } });
+  await assert.rejects(() => readOpenAIChatStream(empty, () => {}), /пустой ответ/);
+  const payload = "x".repeat(120_001);
+  const oversized = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode("data: " + JSON.stringify({ choices: [{ delta: { content: payload } }] }) + "\\n\\n"));
+      controller.close();
+    },
+  });
+  await assert.rejects(() => readOpenAIChatStream(oversized, () => {}), /допустимый размер/);
+});
