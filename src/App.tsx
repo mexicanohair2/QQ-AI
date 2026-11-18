@@ -10,6 +10,7 @@ import { dataUrlToBase64, prepareImage, sampleVideoFrames } from "./lib/media";
 import { buildSearchContext, shouldSearchWeb, type QQSearchSource } from "./lib/qq-ai-core";
 import { readOpenAIChatStream } from "./lib/openai-stream";
 import { readChatMessages, type ChatMessage } from "./lib/chat-storage";
+import { buildMemoryInstruction, normalizeMemoryEntries, MAX_MEMORY_CHARS } from "./lib/user-memory";
 
 type Message = ChatMessage;
 type MediaAttachment = { id: string; file: File; name: string; kind: "image" | "video"; previewUrl: string };
@@ -188,7 +189,7 @@ export default function App() {
       }
       if (prefsResult.data) {
         setMemoryEnabled(Boolean(prefsResult.data.memory_enabled));
-        setMemories(Array.isArray(prefsResult.data.learned_preferences) ? prefsResult.data.learned_preferences : []);
+        setMemories(normalizeMemoryEntries(prefsResult.data.learned_preferences));
       }
       setCloudStatus("Облако подключено");
       if (threadResult.error || prefsResult.error) setCloudStatus("Облако подключено частично");
@@ -301,7 +302,7 @@ export default function App() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        messages: [{ role: "system", content: SYSTEM + (memoryEnabled && memories.length ? "\nПользователь разрешил учитывать эти предпочтения: " + memories.join("; ") : "") }, ...history],
+        messages: [{ role: "system", content: SYSTEM + (memoryEnabled ? buildMemoryInstruction(memories) : "") }, ...history],
       }),
     });
     if (!response.ok) {
@@ -321,7 +322,7 @@ export default function App() {
     if (!engine.current || !offlineReady) throw new Error("Локальная модель ещё не загружена. Нажми «Загрузить и запустить ИИ» на стартовом экране.");
     const systemMessages: Array<{ role: "system"; content: string }> = [{
       role: "system",
-      content: SYSTEM + (memoryEnabled && memories.length ? "\nУчитывай предпочтения пользователя: " + memories.join("; ") : ""),
+      content: SYSTEM + (memoryEnabled ? buildMemoryInstruction(memories) : ""),
     }];
     const lastUserMessage = [...history].reverse().find(message => message.role === "user")?.content || "";
 
@@ -713,13 +714,32 @@ export default function App() {
   async function saveMemory() {
     const value = memoryDraft.trim();
     if (!value) return;
-    const next = [...memories, value].slice(-20);
-    setMemories(next); setMemoryDraft("");
+    if (value.length > MAX_MEMORY_CHARS) {
+      setError("Одна запись памяти не может быть длиннее " + MAX_MEMORY_CHARS + " символов.");
+      return;
+    }
+    const next = normalizeMemoryEntries([...memories, value]);
+    if (memories.some(item => item.toLocaleLowerCase("ru-RU") === value.toLocaleLowerCase("ru-RU"))) {
+      setError("Такая запись уже есть в памяти.");
+      return;
+    }
+    setMemories(next); setMemoryDraft(""); setError("");
     if (supabase && session?.user) {
       const { error: saveError } = await supabase.from("qq_ai_preferences").upsert({
         user_id: session.user.id, memory_enabled: memoryEnabled, learned_preferences: next, updated_at: new Date().toISOString(),
       });
       if (saveError) setError("Не удалось сохранить память в облако: " + saveError.message);
+    }
+  }
+
+  async function removeMemory(index: number) {
+    const next = memories.filter((_, itemIndex) => itemIndex !== index);
+    setMemories(next);
+    if (supabase && session?.user) {
+      const { error: saveError } = await supabase.from("qq_ai_preferences").upsert({
+        user_id: session.user.id, memory_enabled: memoryEnabled, learned_preferences: next, updated_at: new Date().toISOString(),
+      });
+      if (saveError) setError("Не удалось обновить память в облаке: " + saveError.message);
     }
   }
 
@@ -875,8 +895,8 @@ export default function App() {
       <button className="modal-close" onClick={() => setSettingsOpen(false)}>×</button><div className="eyebrow">ПЕРСОНАЛИЗАЦИЯ</div><h2>Память QQ AI</h2>
       <p>Память выключена по умолчанию. Если включить её, QQ AI сможет учитывать только те предпочтения, которые ты сам добавишь.</p>
       <label className="toggle-row"><span><b>Использовать память</b><small>Учитывать сохранённые предпочтения в ответах</small></span><input type="checkbox" checked={memoryEnabled} onChange={e => void toggleMemory(e.target.checked)} /></label>
-      <div className="memory-entry"><input className="modal-input" value={memoryDraft} onChange={e => setMemoryDraft(e.target.value)} placeholder="Например: объясняй коротко и с примерами" /><button className="secondary-button" onClick={() => void saveMemory()}>Добавить</button></div>
-      {memories.length > 0 && <ul className="memory-list">{memories.map((m, i) => <li key={i}>{m}<button onClick={async () => { const next = memories.filter((_, j) => j !== i); setMemories(next); if (supabase && session?.user) await supabase.from("qq_ai_preferences").upsert({ user_id: session.user.id, memory_enabled: memoryEnabled, learned_preferences: next, updated_at: new Date().toISOString() }); }}>Удалить</button></li>)}</ul>}
+      <div className="memory-entry"><input className="modal-input" value={memoryDraft} maxLength={MAX_MEMORY_CHARS} onChange={e => setMemoryDraft(e.target.value)} placeholder="Например: объясняй коротко и с примерами" /><button className="secondary-button" onClick={() => void saveMemory()}>Добавить</button></div>
+      {memories.length > 0 && <ul className="memory-list">{memories.map((m, i) => <li key={i}>{m}<button onClick={() => void removeMemory(i)}>Удалить</button></li>)}</ul>}
       <div className="cloud-line">{cloudStatus}</div>
     </section></div>}
   </main>;
