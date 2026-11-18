@@ -8,6 +8,7 @@ import { readOpenAIChatStream } from "./lib/openai-stream";
 import { readChatMessages, persistChatMessages, readChatThreadId, persistChatThreadId, type ChatMessage } from "./lib/chat-storage";
 import { buildMemoryInstruction, normalizeMemoryEntries, readStoredMemories, persistStoredMemories, readStoredMemoryPreference, resolveMemoryEnabled, persistStoredMemoryEnabled, MAX_MEMORY_CHARS } from "./lib/user-memory";
 import { canAttachMedia, selectVisionBackend, selectLocalVideoFrames } from "./lib/vision-routing";
+import { appendTranscript, resampleTo16kMono, SPEECH_SAMPLE_RATE, MAX_LOCAL_SPEECH_SECONDS } from "./lib/local-audio";
 
 type Message = ChatMessage;
 type MediaAttachment = { id: string; file: File; name: string; kind: "image" | "video"; previewUrl: string };
@@ -75,6 +76,18 @@ export default function App() {
   const [speakingMessageIndex, setSpeakingMessageIndex] = useState<number | null>(null);
   const speechRunRef = useRef(0);
   const recognitionRef = useRef<any>(null);
+  const [localSpeechReady, setLocalSpeechReady] = useState(false);
+  const [localSpeechLoading, setLocalSpeechLoading] = useState(false);
+  const [localSpeechProgress, setLocalSpeechProgress] = useState(0);
+  const [localSpeechStatus, setLocalSpeechStatus] = useState("");
+  const [localSpeechRecording, setLocalSpeechRecording] = useState(false);
+  const localSpeechWorkerRef = useRef<Worker | null>(null);
+  const localSpeechLoadPromiseRef = useRef<{ resolve: () => void; reject: (error: Error) => void } | null>(null);
+  const localSpeechRequestRef = useRef<{ id: string; resolve: (text: string) => void; reject: (error: Error) => void } | null>(null);
+  const localSpeechRecorderRef = useRef<MediaRecorder | null>(null);
+  const localSpeechStreamRef = useRef<MediaStream | null>(null);
+  const localSpeechChunksRef = useRef<BlobPart[]>([]);
+  const localSpeechStopTimerRef = useRef<number | null>(null);
   const [authMessage, setAuthMessage] = useState("");
   const [memoryEnabled, setMemoryEnabled] = useState(() => readStoredMemoryPreference(undefined, session?.user?.id ?? "anonymous")?.enabled ?? false);
   const memoryPersistenceReadyRef = useRef(false);
@@ -776,6 +789,263 @@ export default function App() {
   }, []);
 
 
+  function ensureLocalSpeechWorker(): Worker {
+    if (localSpeechWorkerRef.current) return localSpeechWorkerRef.current;
+
+    const worker = new Worker(new URL("./workers/local-speech.worker.ts", import.meta.url), {
+      type: "module",
+    });
+
+    worker.onmessage = (event: MessageEvent) => {
+      const data = event.data as {
+        type?: string;
+        progress?: number | null;
+        file?: string;
+        status?: string;
+        message?: string;
+        requestId?: string | null;
+        text?: string;
+      };
+
+      if (data.type === "loading") {
+        setLocalSpeechStatus(typeof data.message === "string" ? data.message : "Подготавливаем локальную модель речи…");
+        return;
+      }
+      if (data.type === "progress") {
+        if (typeof data.progress === "number" && Number.isFinite(data.progress)) {
+          setLocalSpeechProgress(Math.max(0, Math.min(100, Math.round(data.progress))));
+        }
+        setLocalSpeechStatus(data.file || data.status || "Скачиваем компоненты Whisper…");
+        return;
+      }
+      if (data.type === "ready") {
+        setLocalSpeechReady(true);
+        setLocalSpeechLoading(false);
+        setLocalSpeechProgress(100);
+        setLocalSpeechStatus("Локальная расшифровка готова");
+        localSpeechLoadPromiseRef.current?.resolve();
+        localSpeechLoadPromiseRef.current = null;
+        return;
+      }
+      if (data.type === "transcribing") {
+        setLocalSpeechStatus(typeof data.message === "string" ? data.message : "Распознаём речь локально…");
+        return;
+      }
+      if (data.type === "transcript" && typeof data.requestId === "string") {
+        const pending = localSpeechRequestRef.current;
+        if (pending?.id === data.requestId) {
+          localSpeechRequestRef.current = null;
+          pending.resolve(typeof data.text === "string" ? data.text : "");
+        }
+        return;
+      }
+      if (data.type === "error") {
+        const message = typeof data.message === "string" ? data.message : "Ошибка локальной расшифровки речи.";
+        if (typeof data.requestId === "string") {
+          const pending = localSpeechRequestRef.current;
+          if (pending?.id === data.requestId) {
+            localSpeechRequestRef.current = null;
+            pending.reject(new Error(message));
+          }
+        } else {
+          localSpeechLoadPromiseRef.current?.reject(new Error(message));
+          localSpeechLoadPromiseRef.current = null;
+        }
+        setLocalSpeechLoading(false);
+        setLocalSpeechStatus("Локальная модель речи не готова");
+        setError(message);
+      }
+    };
+
+    worker.onerror = () => {
+      const failure = new Error("Локальный модуль распознавания завершился с ошибкой. Повтори загрузку модели.");
+      localSpeechLoadPromiseRef.current?.reject(failure);
+      localSpeechRequestRef.current?.reject(failure);
+      localSpeechLoadPromiseRef.current = null;
+      localSpeechRequestRef.current = null;
+      setLocalSpeechLoading(false);
+      setLocalSpeechStatus("Локальная модель речи не готова");
+    };
+
+    localSpeechWorkerRef.current = worker;
+    return worker;
+  }
+
+  async function loadLocalSpeechModel() {
+    if (localSpeechReady || localSpeechLoading) return;
+    setLocalSpeechLoading(true);
+    setLocalSpeechProgress(0);
+    setLocalSpeechStatus("Проверяем поддержку WebGPU…");
+    setError("");
+
+    try {
+      const worker = ensureLocalSpeechWorker();
+      await new Promise<void>((resolve, reject) => {
+        localSpeechLoadPromiseRef.current = { resolve, reject };
+        worker.postMessage({ type: "load" });
+      });
+      try { await navigator.storage?.persist?.(); } catch { /* Browser persistence is best-effort. */ }
+      setLocalSpeechStatus("Локальное распознавание готово");
+      setStatus("Локальная расшифровка готова");
+      setError("");
+    } catch (failure) {
+      const message = failure instanceof Error ? failure.message : "Не удалось загрузить локальную модель речи.";
+      setLocalSpeechLoading(false);
+      setLocalSpeechStatus("Локальная модель речи не готова");
+      setError(message);
+    } finally {
+      localSpeechLoadPromiseRef.current = null;
+    }
+  }
+
+  function transcribeLocalAudio(samples: Float32Array): Promise<string> {
+    if (!localSpeechReady) return Promise.reject(new Error("Сначала загрузи локальную модель распознавания речи."));
+    const worker = ensureLocalSpeechWorker();
+    const requestId = crypto.randomUUID();
+
+    return new Promise((resolve, reject) => {
+      if (localSpeechRequestRef.current) {
+        reject(new Error("Локальная модель уже распознаёт запись."));
+        return;
+      }
+      localSpeechRequestRef.current = { id: requestId, resolve, reject };
+      worker.postMessage({ type: "transcribe", requestId, samples }, [samples.buffer]);
+    });
+  }
+
+  async function decodeAndTranscribeLocalAudio(blob: Blob) {
+    if (!blob.size) throw new Error("Запись получилась пустой. Повтори попытку.");
+    const AudioContextConstructor = window.AudioContext ||
+      (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextConstructor) {
+      throw new Error("Этот браузер не умеет декодировать запись микрофона для локальной расшифровки.");
+    }
+
+    const context = new AudioContextConstructor({ sampleRate: SPEECH_SAMPLE_RATE });
+    try {
+      const decoded = await context.decodeAudioData(await blob.arrayBuffer());
+      const channels = Array.from(
+        { length: decoded.numberOfChannels },
+        (_, index) => decoded.getChannelData(index),
+      );
+      const samples = resampleTo16kMono(channels, decoded.sampleRate, MAX_LOCAL_SPEECH_SECONDS);
+      return await transcribeLocalAudio(samples);
+    } finally {
+      try { await context.close(); } catch { /* AudioContext may already be closed. */ }
+    }
+  }
+
+  async function startLocalSpeechRecording() {
+    if (!localSpeechReady) {
+      setError("Сначала загрузи локальную модель распознавания речи.");
+      return;
+    }
+    if (localSpeechRecording) return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setError("Этот браузер не поддерживает локальную запись микрофона.");
+      return;
+    }
+
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+    } catch (failure) {
+      const name = failure instanceof Error ? failure.name : "";
+      setError(name === "NotAllowedError"
+        ? "Нет доступа к микрофону. Разреши его в настройках браузера."
+        : "Не удалось включить микрофон. Проверь разрешение и повтори попытку.");
+      return;
+    }
+
+    try {
+      const preferredMime = ["audio/webm;codecs=opus", "audio/mp4"].find(type => MediaRecorder.isTypeSupported(type));
+      const recorder = preferredMime
+        ? new MediaRecorder(stream, { mimeType: preferredMime })
+        : new MediaRecorder(stream);
+      localSpeechStreamRef.current = stream;
+      localSpeechRecorderRef.current = recorder;
+      localSpeechChunksRef.current = [];
+
+      recorder.ondataavailable = event => {
+        if (event.data?.size) localSpeechChunksRef.current.push(event.data);
+      };
+      recorder.onerror = () => {
+        setLocalSpeechRecording(false);
+        setListening(false);
+        setError("Не удалось записать звук. Повтори попытку.");
+      };
+      recorder.onstop = async () => {
+        if (localSpeechStopTimerRef.current !== null) {
+          window.clearTimeout(localSpeechStopTimerRef.current);
+          localSpeechStopTimerRef.current = null;
+        }
+        if (localSpeechRecorderRef.current === recorder) localSpeechRecorderRef.current = null;
+        stream.getTracks().forEach(track => track.stop());
+        if (localSpeechStreamRef.current === stream) localSpeechStreamRef.current = null;
+        setLocalSpeechRecording(false);
+        setListening(false);
+
+        const blob = new Blob(localSpeechChunksRef.current, { type: recorder.mimeType || preferredMime || "audio/webm" });
+        localSpeechChunksRef.current = [];
+        setLocalSpeechStatus("Обрабатываем запись на устройстве…");
+        try {
+          const transcript = await decodeAndTranscribeLocalAudio(blob);
+          setDraft(current => appendTranscript(current, transcript));
+          setLocalSpeechStatus("Готово. Проверь расшифровку перед отправкой.");
+          setVoiceNoticeOpen(false);
+          setError("");
+        } catch (failure) {
+          const message = failure instanceof Error ? failure.message : "Не удалось распознать речь.";
+          setLocalSpeechStatus("Локальная расшифровка не выполнена");
+          setError(message);
+        }
+      };
+
+      recorder.start(250);
+      setLocalSpeechRecording(true);
+      setListening(true);
+      setLocalSpeechStatus("Запись идёт. Она остановится через 20 секунд.");
+      setError("");
+      localSpeechStopTimerRef.current = window.setTimeout(() => {
+        if (recorder.state !== "inactive") recorder.stop();
+      }, MAX_LOCAL_SPEECH_SECONDS * 1000);
+    } catch (failure) {
+      stream.getTracks().forEach(track => track.stop());
+      localSpeechStreamRef.current = null;
+      localSpeechRecorderRef.current = null;
+      setLocalSpeechRecording(false);
+      setListening(false);
+      setError(failure instanceof Error ? failure.message : "Не удалось начать запись.");
+    }
+  }
+
+  function stopLocalSpeechRecording() {
+    const recorder = localSpeechRecorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.stop();
+      return;
+    }
+    localSpeechStreamRef.current?.getTracks().forEach(track => track.stop());
+    localSpeechStreamRef.current = null;
+    setLocalSpeechRecording(false);
+    setListening(false);
+  }
+
+  useEffect(() => () => {
+    if (localSpeechStopTimerRef.current !== null) window.clearTimeout(localSpeechStopTimerRef.current);
+    try {
+      const recorder = localSpeechRecorderRef.current;
+      if (recorder && recorder.state !== "inactive") recorder.stop();
+    } catch { /* Recorder may already be stopping. */ }
+    localSpeechStreamRef.current?.getTracks().forEach(track => track.stop());
+    localSpeechLoadPromiseRef.current?.reject(new Error("Окно QQ AI закрыто."));
+    localSpeechRequestRef.current?.reject(new Error("Окно QQ AI закрыто."));
+    localSpeechWorkerRef.current?.terminate();
+    localSpeechWorkerRef.current = null;
+  }, []);
+
   function beginVoiceRecognition() {
     const Recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!Recognition) {
@@ -814,6 +1084,10 @@ export default function App() {
   }
 
   function stopVoiceRecognition() {
+    if (localSpeechRecorderRef.current && localSpeechRecorderRef.current.state !== "inactive") {
+      stopLocalSpeechRecording();
+      return;
+    }
     try { recognitionRef.current?.stop(); } catch { /* recognition may already be stopped */ }
     setListening(false);
   }
@@ -1113,11 +1387,18 @@ export default function App() {
       </footer>
     </section>
 
-    {voiceNoticeOpen && <div className="modal-backdrop" onClick={() => setVoiceNoticeOpen(false)}><section className="modal" onClick={e => e.stopPropagation()}>
-      <button className="modal-close" onClick={() => setVoiceNoticeOpen(false)}>×</button><div className="modal-symbol"><VoiceIcon /></div><h2>Голосовой ввод</h2>
-      <p>Браузер распознает речь и вставит расшифровку в поле сообщения. В зависимости от браузера аудио может обрабатываться его удалённым сервисом распознавания. Текст можно проверить и изменить до отправки QQ AI.</p>
-      <button className="primary full" onClick={() => { setVoiceNoticeOpen(false); beginVoiceRecognition(); }}>Продолжить</button>
-      <button className="secondary-button full" style={{marginTop:8}} onClick={() => setVoiceNoticeOpen(false)}>Отмена</button>
+    {voiceNoticeOpen && <div className="modal-backdrop" onClick={() => { if (!localSpeechRecording) setVoiceNoticeOpen(false); }}><section className="modal" onClick={e => e.stopPropagation()}>
+      <button className="modal-close" onClick={() => { if (!localSpeechRecording) setVoiceNoticeOpen(false); }} disabled={localSpeechRecording}>×</button><div className="modal-symbol"><VoiceIcon /></div><h2>Голосовой ввод</h2>
+      <p>Можно использовать распознавание браузера: в зависимости от него звук может обрабатываться внешним сервисом. Локальный вариант скачивает мультиязычную Whisper Tiny и обрабатывает запись на устройстве; аудио не отправляется и не сохраняется. Расшифровка появится в поле сообщения — проверь её перед отправкой.</p>
+      {!localSpeechReady && <button className="secondary-button full" onClick={() => void loadLocalSpeechModel()} disabled={localSpeechLoading || busy}>
+        {localSpeechLoading ? "Загружаем модель · " + localSpeechProgress + "%" : "Загрузить локальную модель · ~75 МБ"}
+      </button>}
+      {localSpeechLoading && <small>{localSpeechStatus || "Скачивание и подготовка…"}</small>}
+      {localSpeechReady && !localSpeechRecording && <button className="secondary-button full" onClick={() => void startLocalSpeechRecording()} disabled={busy}>Записать локально</button>}
+      {localSpeechRecording && <button className="primary full" onClick={stopLocalSpeechRecording}>Остановить и распознать</button>}
+      {localSpeechStatus && <small>{localSpeechStatus}</small>}
+      <button className="primary full" style={{marginTop:8}} onClick={() => { setVoiceNoticeOpen(false); beginVoiceRecognition(); }} disabled={localSpeechRecording}>Продолжить через браузер</button>
+      <button className="secondary-button full" style={{marginTop:8}} onClick={() => setVoiceNoticeOpen(false)} disabled={localSpeechRecording}>Отмена</button>
     </section></div>}
 
     {authOpen && <div className="modal-backdrop" onClick={() => setAuthOpen(false)}><section className="modal" onClick={e => e.stopPropagation()}>
