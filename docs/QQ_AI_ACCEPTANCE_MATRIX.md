@@ -35,7 +35,7 @@ A model is not “stronger” because it sounds more confident. Compare blind ou
 | MATH-04 | Word problem | Correct setup, calculation, and checked answer |
 | MATH-05 | Invalid division/expression | Safe, clear error; no crash |
 
-## Image and OCR set — blocked until a vision provider is configured
+## Image and OCR set — UI and transport implemented; inference blocked until a vision model is configured
 
 | ID | Task | Acceptance condition |
 |---|---|---|
@@ -47,7 +47,7 @@ A model is not “stronger” because it sounds more confident. Compare blind ou
 | IMG-06 | Screenshot with multiple UI regions | Identify relevant region without inventing unseen content |
 | IMG-07 | Blurry or cropped image | Explain limitations and request a clearer crop only if needed |
 
-## Video set — blocked until bounded frame analysis is implemented
+## Video set — local frame sampling and timestamp transport implemented; inference/audio blocked until models are configured
 
 | ID | Task | Acceptance condition |
 |---|---|---|
@@ -57,7 +57,7 @@ A model is not “stronger” because it sounds more confident. Compare blind ou
 | VID-04 | Audio-dependent question | State whether audio was transcribed; do not infer from frames |
 | VID-05 | Oversized/unsupported clip | Reject safely with useful limits |
 
-## Web search set — blocked until a search adapter is implemented
+## Web search set — DuckDuckGo adapter implemented; live reliability and full-page extraction still require verification
 
 | ID | Task | Acceptance condition |
 |---|---|---|
@@ -100,3 +100,8 @@ A feature can move from “planned” to “implemented” only when:
 - Typecheck, tests, and build pass.
 - Mobile layout is checked.
 - Exact model/provider and current capability status are documented.
+
+## Executable benchmark
+
+The initial Russian evaluation prompts are stored in `evals/qq-ai-benchmark.ru.json`. Run `node scripts/run-qq-ai-benchmark.mjs` against a configured QQ online endpoint. The runner intentionally excludes image/video cases because it does not upload media. Evaluate answers manually against the per-case rubric and reference; do not let the model score itself. Record exact model revision, prompt version, date, latency, and independent verification.
+
