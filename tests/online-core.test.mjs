@@ -146,3 +146,11 @@ test("chat gateway keeps its upstream timeout active for the lifetime of the res
   assert.match(source, /async cancel\(reason\)/);
   assert.match(source, /if \(!streamingResponse\) clearTimeout\(timeout\)/);
 });
+
+
+test("welcome screen offers an explicit path to the offline model when online inference is unconfigured", async () => {
+  const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
+  assert.match(app, /Онлайн-модель пока не подключена/);
+  assert.match(app, /Открыть Qwen/);
+  assert.match(app, /Перейти к Qwen/);
+});
