@@ -166,7 +166,8 @@ test("welcome screen offers an explicit path to the offline model when online in
   const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
   assert.match(app, /Онлайн-модель пока не подключена/);
   assert.match(app, /Открыть локальный режим/);
-  assert.match(app, /Перейти в офлайн-режим/);
+  assert.match(app, /Онлайн-режим не переключается автоматически/);
+  assert.match(app, /Открыть офлайн-режим/);
 });
 
 
@@ -361,12 +362,19 @@ test("assistant answers can be read aloud locally and speech playback can be sto
   assert.match(styles, /\.feedback \.speak-button/);
 });
 
-test("online mode falls back to the local model when cloud inference is unconfigured or unavailable", async () => {
+test("online mode requires an explicit switch before using the local model", async () => {
   const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
-  assert.match(app, /mode === "online" && onlineModelReady === false/);
-  assert.match(app, /if \(offlineReady\)[\s\S]*?setMode\("offline"\)[\s\S]*?await sendOffline\(next\)/);
-  assert.match(app, /Онлайн-модель недоступна\. Переключаюсь на локальную/);
-  assert.match(app, /Облачная модель QQ AI ещё не подключена/);
+  const start = app.indexOf("async function send()");
+  const end = app.indexOf("async function signIn()", start);
+  assert.ok(start >= 0 && end > start, "send handler should exist");
+  const handler = app.slice(start, end);
+  assert.match(handler, /mode === "online" && onlineModelReady === false/);
+  assert.match(handler, /Онлайн-режим не переключается автоматически/);
+  const onlineStart = handler.indexOf('else if (mode === "online")');
+  const offlineStart = handler.indexOf('} else await sendOffline(next);', onlineStart);
+  assert.ok(onlineStart >= 0 && offlineStart > onlineStart);
+  assert.doesNotMatch(handler.slice(onlineStart, offlineStart), /sendOffline|setMode\("offline"\)/);
+  assert.match(app, /mode === "online" && <button className="secondary-button"/);
 });
 
 
