@@ -35,6 +35,17 @@ function plainText(value: string): string {
     .trim();
 }
 
+function decodeBingRedirect(raw: string): string | null {
+  try {
+    const value = raw.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = value + "=".repeat((4 - value.length % 4) % 4);
+    const decoded = atob(padded);
+    return /^https?:\/\//i.test(decoded) ? decoded : null;
+  } catch {
+    return null;
+  }
+}
+
 export function normalizeSearchUrl(rawValue: string): string | null {
   let raw = decodeHtmlEntities(rawValue.trim());
   if (!raw) return null;
@@ -46,7 +57,14 @@ export function normalizeSearchUrl(rawValue: string): string | null {
       const target = candidate.searchParams.get("uddg");
       if (!target) return null;
       raw = target;
+    } else if (candidate.hostname === "www.bing.com" && candidate.pathname.startsWith("/ck/a")) {
+      const encoded = candidate.searchParams.get("u") || "";
+      if (!encoded.startsWith("a1")) return null;
+      const target = decodeBingRedirect(encoded.slice(2));
+      if (!target) return null;
+      raw = target;
     }
+
     const url = new URL(raw);
     if (url.protocol !== "https:") return null;
     const host = url.hostname.toLowerCase();
@@ -57,6 +75,43 @@ export function normalizeSearchUrl(rawValue: string): string | null {
   } catch {
     return null;
   }
+}
+
+/** Parses Bing's organic result cards and removes its tracking redirects. */
+export function parseBingResults(html: string, retrievedAt = new Date().toISOString()): QQSearchSource[] {
+  const starts = [...html.matchAll(/<li\b[^>]*class=["'][^"']*\bb_algo\b[^"']*["'][^>]*>/gi)];
+  const results: QQSearchSource[] = [];
+  const seen = new Set<string>();
+
+  for (let index = 0; index < starts.length && results.length < 8; index += 1) {
+    const start = starts[index].index ?? 0;
+    const end = starts[index + 1]?.index ?? html.length;
+    const block = html.slice(start, end);
+    const heading = block.match(/<h2\b[^>]*>\s*<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/i);
+    if (!heading) continue;
+
+    const url = normalizeSearchUrl(heading[1]);
+    if (!url || seen.has(url)) continue;
+
+    let domain = "";
+    try { domain = new URL(url).hostname.replace(/^www\./i, ""); } catch { continue; }
+    const title = plainText(heading[2]);
+    const snippetMatch = block.match(/<div\b[^>]*class=["'][^"']*\bb_caption\b[^"']*["'][^>]*>[\s\S]*?<p\b[^>]*>([\s\S]*?)<\/p>/i)
+      ?? block.match(/<p\b[^>]*>([\s\S]*?)<\/p>/i);
+    const excerpt = plainText(snippetMatch?.[1] ?? "");
+    if (!title || !domain) continue;
+
+    seen.add(url);
+    results.push({
+      title: title.slice(0, 180),
+      url,
+      domain,
+      retrievedAt,
+      excerpt: excerpt.slice(0, 420),
+    });
+  }
+
+  return results;
 }
 
 /** Parses only DuckDuckGo's visible result links/snippets. It does not fetch result pages. */
