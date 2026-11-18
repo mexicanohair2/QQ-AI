@@ -9,6 +9,7 @@ import { readChatMessages, persistChatMessages, readChatThreadId, persistChatThr
 import { buildMemoryInstruction, normalizeMemoryEntries, readStoredMemories, persistStoredMemories, readStoredMemoryPreference, resolveMemoryEnabled, persistStoredMemoryEnabled, MAX_MEMORY_CHARS } from "./lib/user-memory";
 import { canAttachMedia, selectVisionBackend, selectLocalVideoFrames } from "./lib/vision-routing";
 import { appendTranscript, resampleTo16kMono, SPEECH_SAMPLE_RATE, MAX_LOCAL_SPEECH_SECONDS } from "./lib/local-audio";
+import { getOtherLocalRuntimes, type LocalRuntime } from "./lib/local-runtime";
 
 type Message = ChatMessage;
 type MediaAttachment = { id: string; file: File; name: string; kind: "image" | "video"; previewUrl: string };
@@ -109,6 +110,63 @@ export default function App() {
   const chatPersistenceReadyRef = useRef(false);
   const chatPersistenceScopeRef = useRef("anonymous");
   const engine = useRef<any>(null);
+
+  function releaseLocalVisionWorker() {
+    localVisionLoadPromiseRef.current?.reject(new Error("Локальный Vision выгружен для освобождения памяти."));
+    localVisionRequestRef.current?.reject(new Error("Локальный Vision выгружен для освобождения памяти."));
+    localVisionLoadPromiseRef.current = null;
+    localVisionRequestRef.current = null;
+    localVisionWorkerRef.current?.terminate();
+    localVisionWorkerRef.current = null;
+    setLocalVisionReady(false);
+    setLocalVisionLoading(false);
+    setLocalVisionProgress(0);
+    setLocalVisionStatus("Модель выгружена для освобождения памяти; загруженные файлы остаются в кэше.");
+  }
+
+  function releaseLocalSpeechWorker() {
+    if (localSpeechRecorderRef.current && localSpeechRecorderRef.current.state !== "inactive") {
+      throw new Error("Сначала останови запись с микрофона.");
+    }
+    if (localSpeechTranscribing || localSpeechRequestRef.current) {
+      throw new Error("Дождись завершения распознавания речи.");
+    }
+    localSpeechLoadPromiseRef.current?.reject(new Error("Whisper выгружен для освобождения памяти."));
+    localSpeechRequestRef.current?.reject(new Error("Whisper выгружен для освобождения памяти."));
+    localSpeechLoadPromiseRef.current = null;
+    localSpeechRequestRef.current = null;
+    localSpeechWorkerRef.current?.terminate();
+    localSpeechWorkerRef.current = null;
+    setLocalSpeechReady(false);
+    setLocalSpeechLoading(false);
+    setLocalSpeechProgress(0);
+    setLocalSpeechStatus("Модель выгружена для освобождения памяти; загруженные файлы остаются в кэше.");
+  }
+
+  async function prepareLocalRuntime(target: LocalRuntime) {
+    if (localSpeechRecording || localSpeechTranscribing) {
+      throw new Error("Сначала закончи текущую запись или распознавание речи.");
+    }
+    if (target !== "vision" && localVisionLoading) {
+      throw new Error("Дождись завершения загрузки локального Vision.");
+    }
+    if (target !== "speech" && localSpeechLoading) {
+      throw new Error("Дождись завершения загрузки локального распознавания речи.");
+    }
+
+    for (const runtime of getOtherLocalRuntimes(target)) {
+      if (runtime === "text" && engine.current) {
+        const previousEngine = engine.current;
+        await previousEngine.unload();
+        if (engine.current === previousEngine) engine.current = null;
+        setOfflineReady(false);
+      } else if (runtime === "vision" && localVisionWorkerRef.current) {
+        releaseLocalVisionWorker();
+      } else if (runtime === "speech" && localSpeechWorkerRef.current) {
+        releaseLocalSpeechWorker();
+      }
+    }
+  }
   const bottom = useRef<HTMLDivElement>(null);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
 
@@ -294,9 +352,10 @@ export default function App() {
   }, [messages, session?.user?.id, threadId, cloudLoaded]);
 
   async function loadOfflineModel() {
-    if (busy || offlineReady) return;
+    if (busy || offlineReady || localVisionLoading || localSpeechLoading || localSpeechRecording || localSpeechTranscribing) return;
     setBusy(true); setError(""); setProgress(0); setStatus("Проверяем поддержку WebGPU…");
     try {
+      await prepareLocalRuntime("text");
       const gpu = (navigator as Navigator & { gpu?: { requestAdapter: () => Promise<unknown> } }).gpu;
       if (!gpu) throw new Error("В этом браузере нет WebGPU. Для локальной модели нужен совместимый браузер.");
       setStatus("Проверяем графический адаптер…");
@@ -737,13 +796,14 @@ export default function App() {
   }
 
   async function loadLocalVisionModel() {
-    if (localVisionReady || localVisionLoading) return;
+    if (busy || localVisionReady || localVisionLoading || localSpeechLoading || localSpeechRecording || localSpeechTranscribing) return;
     setLocalVisionLoading(true);
     setLocalVisionProgress(0);
     setLocalVisionStatus("Проверяем поддержку WebGPU…");
     setError("");
 
     try {
+      await prepareLocalRuntime("vision");
       const worker = ensureLocalVisionWorker();
       await new Promise<void>((resolve, reject) => {
         localVisionLoadPromiseRef.current = { resolve, reject };
@@ -873,13 +933,14 @@ export default function App() {
   }
 
   async function loadLocalSpeechModel() {
-    if (localSpeechReady || localSpeechLoading) return;
+    if (busy || localSpeechReady || localSpeechLoading || localVisionLoading || localSpeechRecording || localSpeechTranscribing) return;
     setLocalSpeechLoading(true);
     setLocalSpeechProgress(0);
     setLocalSpeechStatus("Проверяем поддержку WebGPU…");
     setError("");
 
     try {
+      await prepareLocalRuntime("speech");
       const worker = ensureLocalSpeechWorker();
       await new Promise<void>((resolve, reject) => {
         localSpeechLoadPromiseRef.current = { resolve, reject };
@@ -1386,7 +1447,7 @@ export default function App() {
       {mode === "offline" && !offlineReady && messages.length > 0 && <div className="offline-inline"><span>Офлайн-модель не загружена</span><button onClick={loadOfflineModel} disabled={busy}>Подготовить</button>{busy && <span>{progress}%</span>}</div>}
       {!localVisionReady && (mode === "offline" || visionReady !== true) && <div className="offline-inline local-vision-inline">
         <span>{localVisionLoading ? localVisionStatus || "Загружаем локальную модель зрения…" : "Локальный анализ изображений — без отправки фото на сервер."}</span>
-        <button onClick={() => void loadLocalVisionModel()} disabled={busy || localVisionLoading}>{localVisionLoading ? localVisionProgress + "%" : "Загрузить Vision · ~190–270 МБ"}</button>
+        <button onClick={() => void loadLocalVisionModel()} disabled={busy || localVisionLoading || localSpeechLoading || localSpeechRecording || localSpeechTranscribing}>{localVisionLoading ? localVisionProgress + "%" : "Загрузить Vision · ~190–270 МБ"}</button>
         {localVisionLoading && <span>{localVisionProgress}%</span>}
       </div>}
       {localVisionReady && <div className="offline-inline local-vision-inline"><span>Локальное зрение готово · фото обрабатываются на устройстве</span><span>WebGPU</span></div>}
@@ -1415,7 +1476,7 @@ export default function App() {
     {voiceNoticeOpen && <div className="modal-backdrop" onClick={() => { if (!localSpeechRecording && !localSpeechTranscribing) setVoiceNoticeOpen(false); }}><section className="modal" onClick={e => e.stopPropagation()}>
       <button className="modal-close" onClick={() => { if (!localSpeechRecording && !localSpeechTranscribing) setVoiceNoticeOpen(false); }} disabled={localSpeechRecording || localSpeechTranscribing}>×</button><div className="modal-symbol"><VoiceIcon /></div><h2>Голосовой ввод</h2>
       <p>Можно использовать распознавание браузера: в зависимости от него звук может обрабатываться внешним сервисом. Локальный вариант скачивает мультиязычную Whisper Tiny и обрабатывает запись на устройстве; аудио не отправляется и не сохраняется. Расшифровка появится в поле сообщения — проверь её перед отправкой.</p>
-      {!localSpeechReady && <button className="secondary-button full" onClick={() => void loadLocalSpeechModel()} disabled={localSpeechLoading || busy}>
+      {!localSpeechReady && <button className="secondary-button full" onClick={() => void loadLocalSpeechModel()} disabled={localSpeechLoading || busy || localVisionLoading || localSpeechRecording || localSpeechTranscribing}>
         {localSpeechLoading ? "Загружаем модель · " + localSpeechProgress + "%" : "Загрузить локальную модель · ~70–90 МБ"}
       </button>}
       {localSpeechLoading && <small>{localSpeechStatus || "Скачивание и подготовка…"}</small>}
