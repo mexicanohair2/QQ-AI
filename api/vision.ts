@@ -142,7 +142,7 @@ export default async function handler(request: Request): Promise<Response> {
     });
 
     if (!upstream.ok) {
-      // Upstream diagnostics are untrusted and may contain private provider details.
+      // Provider response text is intentionally discarded.
       try { await upstream.body?.cancel(); } catch { /* upstream may already be closed */ }
       return json({ error: "Vision-модель QQ AI временно недоступна (ошибка шлюза провайдера)." }, 502);
     }
