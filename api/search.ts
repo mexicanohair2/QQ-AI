@@ -1,4 +1,4 @@
-import { readResponseTextLimited } from "../src/lib/bounded-response";
+import { readRequestTextLimited, readResponseTextLimited } from "../src/lib/bounded-response";
 import {
   buildSearchOnlyAnswer,
   parseDuckDuckGoResults,
@@ -31,8 +31,9 @@ export default async function handler(request: Request): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12_000);
   try {
-    const raw = await request.text();
-    if (raw.length > 2_000) return json({ error: "Поисковый запрос слишком длинный." }, 413);
+    let raw: string;
+    try { raw = await readRequestTextLimited(request, 2_000); }
+    catch { return json({ error: "Поисковый запрос слишком длинный." }, 413); }
     let body: { query?: unknown };
     try { body = JSON.parse(raw) as { query?: unknown }; }
     catch { return json({ error: "Некорректный JSON-запрос." }, 400); }
