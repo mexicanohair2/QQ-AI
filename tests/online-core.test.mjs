@@ -27,6 +27,8 @@ test("capabilities distinguish actual online, search, vision, video and offline 
   const source = await readFile(new URL("../api/capabilities.ts", import.meta.url), "utf8");
   for (const key of ["onlineText", "webSearch", "imageUnderstanding", "videoUnderstanding", "offlineText"]) assert.ok(source.includes(key));
   assert.match(source, /state: hasVision \? "configured" : "unconfigured"/);
+  assert.match(source, /DuckDuckGo HTML \+ Bing HTML/);
+  assert.match(source, /providers: \["DuckDuckGo", "Bing"\]/);
 });
 
 test("vision gateway validates request size, image MIME, timestamps and retention", async () => {
