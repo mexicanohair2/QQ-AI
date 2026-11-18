@@ -7,10 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -b",
-    "cap:add:android": "cap add android",
-    "cap:sync": "cap sync",
-    "android:open": "cap open android"
+    "typecheck": "tsc -b"
   },
   "dependencies": {
     "@mlc-ai/web-llm": "0.2.88",
@@ -23,15 +20,11 @@
     "react-markdown": "^10.1.0",
     "rehype-katex": "^7.0.1",
     "remark-gfm": "^4.0.1",
-    "remark-math": "^6.0.0",
-    "@capacitor/core": "8.6.2",
-    "@capacitor/android": "8.6.2",
-    "@capgo/capacitor-speech-recognition": "8.5.1"
+    "remark-math": "^6.0.0"
   },
   "devDependencies": {
     "typescript": "latest",
     "@types/react": "latest",
-    "@types/react-dom": "latest",
-    "@capacitor/cli": "8.6.2"
+    "@types/react-dom": "latest"
   }
 }
