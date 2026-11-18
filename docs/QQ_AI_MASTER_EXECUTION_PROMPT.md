@@ -303,3 +303,13 @@ P8 — only when the user asks, package the combined QQCross + QQ AI product as 
 ## 16. Final operating rule
 
 Do the work that can be completed safely with available tools and permissions. Do not replace implementation with promises or an oversized plan. If a provider key, age-eligible account, physical-device test, or user approval is required, implement the provider-neutral parts, keep the capability visibly unavailable, and explain the exact blocker without requesting secrets in chat.
+
+## 13. QQ-owned online model — user-approved product direction
+
+The intended online assistant is **QQ AI Online**, distinct from **Qwen Offline**. The online model must become a QQ-maintained model release with its own versioned fine-tuned weights/checkpoints, training recipe, evaluation record, and self-hosted inference service. Do not present Qwen as the online model, and do not silently route ordinary online requests to Qwen.
+
+The first practical path is to select a permissively licensed open-weight base, adapt it with QQ-authored and appropriately licensed/consented data, retain the resulting QQ checkpoint, and host inference on approved infrastructure. Training a foundation model from random initialization is a separate long-term research effort and must not be falsely claimed.
+
+Never train on private user conversations, uploaded media, or QQ Knowledge documents by default. Preserve data provenance, license obligations, checkpoint hashes, and benchmark results. Do not claim QQ AI is stronger than Qwen until the same Russian evaluation suite has been run and independently scored.
+
+The current repository contains an online gateway, search adapter, image/video UI and media preparation, and a vision gateway contract. It does **not** yet contain trained QQ weights, a provisioned GPU inference host, or live configured online/vision inference. The Russian benchmark dataset and runner are evaluation tools, not evidence of model quality.
