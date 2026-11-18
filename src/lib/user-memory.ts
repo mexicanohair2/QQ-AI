@@ -75,6 +75,41 @@ export function persistStoredMemories(value: unknown, storage?: MemoryStorage | 
   }
 }
 
+export type StoredMemoryPreference = { enabled: boolean; updatedAt: number };
+
+export function readStoredMemoryPreference(storage?: MemoryStorage | null): StoredMemoryPreference | null {
+  try {
+    const target = storage ?? (typeof localStorage !== "undefined" ? localStorage : null);
+    const raw = target?.getItem(MEMORY_ENABLED_STORAGE_KEY);
+    if (!raw) return null;
+    if (raw === "true" || raw === "false") {
+      return { enabled: raw === "true", updatedAt: 0 };
+    }
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    const candidate = parsed as { enabled?: unknown; updatedAt?: unknown };
+    if (typeof candidate.enabled !== "boolean" ||
+        typeof candidate.updatedAt !== "number" ||
+        !Number.isFinite(candidate.updatedAt) ||
+        candidate.updatedAt < 0) return null;
+    return { enabled: candidate.enabled, updatedAt: candidate.updatedAt };
+  } catch {
+    return null;
+  }
+}
+
+export function resolveMemoryEnabled(
+  localPreference: StoredMemoryPreference | null,
+  cloudEnabled: boolean | null,
+  cloudUpdatedAt: number | null,
+): boolean {
+  if (!localPreference) return cloudEnabled ?? false;
+  if (cloudEnabled === null || cloudUpdatedAt === null || localPreference.updatedAt > cloudUpdatedAt) {
+    return localPreference.enabled;
+  }
+  return cloudEnabled;
+}
+
 export function readStoredMemoryEnabled(storage?: MemoryStorage | null): boolean | null {
   try {
     const target = storage ?? (typeof localStorage !== "undefined" ? localStorage : null);
@@ -88,11 +123,15 @@ export function readStoredMemoryEnabled(storage?: MemoryStorage | null): boolean
   }
 }
 
-export function persistStoredMemoryEnabled(enabled: boolean, storage?: MemoryStorage | null): boolean {
+export function persistStoredMemoryEnabled(
+  enabled: boolean,
+  storage?: MemoryStorage | null,
+  updatedAt = Date.now(),
+): boolean {
   try {
     const target = storage ?? (typeof localStorage !== "undefined" ? localStorage : null);
-    if (!target) return false;
-    target.setItem(MEMORY_ENABLED_STORAGE_KEY, enabled ? "true" : "false");
+    if (!target || !Number.isFinite(updatedAt) || updatedAt < 0) return false;
+    target.setItem(MEMORY_ENABLED_STORAGE_KEY, JSON.stringify({ enabled, updatedAt }));
     return true;
   } catch {
     return false;
