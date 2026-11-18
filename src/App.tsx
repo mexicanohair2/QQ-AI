@@ -132,7 +132,6 @@ export default function App() {
       throw new Error("Дождись завершения распознавания речи.");
     }
     localSpeechLoadPromiseRef.current?.reject(new Error("Whisper выгружен для освобождения памяти."));
-    localSpeechRequestRef.current?.reject(new Error("Whisper выгружен для освобождения памяти."));
     localSpeechLoadPromiseRef.current = null;
     localSpeechRequestRef.current = null;
     localSpeechWorkerRef.current?.terminate();
