@@ -26,6 +26,8 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+      - name: Check QQ AI benchmark runner syntax
+        run: node --check scripts/run-qq-ai-benchmark.mjs
       - name: Validate QQCross game AI contracts
         run: npm run test:game-ai
       - name: Validate QQ AI online core contracts
