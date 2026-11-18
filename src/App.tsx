@@ -978,10 +978,18 @@ export default function App() {
         if (event.data?.size) localSpeechChunksRef.current.push(event.data);
       };
       recorder.onerror = () => {
+        if (localSpeechStopTimerRef.current !== null) {
+          window.clearTimeout(localSpeechStopTimerRef.current);
+          localSpeechStopTimerRef.current = null;
+        }
         setLocalSpeechRecording(false);
         setListening(false);
-        try { stream.getTracks().forEach(track => track.stop()); } catch { /* Stream may already be closed. */ }
-        localSpeechStreamRef.current = null;
+        localSpeechChunksRef.current = [];
+        try {
+          if (recorder.state !== "inactive") recorder.stop();
+          stream.getTracks().forEach(track => track.stop());
+        } catch { /* Stream may already be closed. */ }
+        if (localSpeechStreamRef.current === stream) localSpeechStreamRef.current = null;
         setError("Не удалось записать звук. Повтори попытку.");
       };
       recorder.onstop = async () => {
@@ -1402,7 +1410,7 @@ export default function App() {
       </footer>
     </section>
 
-    {voiceNoticeOpen && <div className="modal-backdrop" onClick={() => { if (!localSpeechRecording) setVoiceNoticeOpen(false); }}><section className="modal" onClick={e => e.stopPropagation()}>
+    {voiceNoticeOpen && <div className="modal-backdrop" onClick={() => { if (!localSpeechRecording && !localSpeechTranscribing) setVoiceNoticeOpen(false); }}><section className="modal" onClick={e => e.stopPropagation()}>
       <button className="modal-close" onClick={() => { if (!localSpeechRecording && !localSpeechTranscribing) setVoiceNoticeOpen(false); }} disabled={localSpeechRecording || localSpeechTranscribing}>×</button><div className="modal-symbol"><VoiceIcon /></div><h2>Голосовой ввод</h2>
       <p>Можно использовать распознавание браузера: в зависимости от него звук может обрабатываться внешним сервисом. Локальный вариант скачивает мультиязычную Whisper Tiny и обрабатывает запись на устройстве; аудио не отправляется и не сохраняется. Расшифровка появится в поле сообщения — проверь её перед отправкой.</p>
       {!localSpeechReady && <button className="secondary-button full" onClick={() => void loadLocalSpeechModel()} disabled={localSpeechLoading || busy}>
@@ -1414,7 +1422,7 @@ export default function App() {
       {localSpeechTranscribing && <small>Распознаём запись на устройстве…</small>}
       {localSpeechStatus && <small>{localSpeechStatus}</small>}
       <button className="primary full" style={{marginTop:8}} onClick={() => { setVoiceNoticeOpen(false); beginVoiceRecognition(); }} disabled={localSpeechRecording || localSpeechTranscribing}>Продолжить через браузер</button>
-      <button className="secondary-button full" style={{marginTop:8}} onClick={() => setVoiceNoticeOpen(false)} disabled={localSpeechRecording}>Отмена</button>
+      <button className="secondary-button full" style={{marginTop:8}} onClick={() => setVoiceNoticeOpen(false)} disabled={localSpeechRecording || localSpeechTranscribing}>Отмена</button>
     </section></div>}
 
     {authOpen && <div className="modal-backdrop" onClick={() => setAuthOpen(false)}><section className="modal" onClick={e => e.stopPropagation()}>
