@@ -8,7 +8,7 @@ export default async function handler(request: Request): Promise<Response> {
     webSearch: { state: "available", provider: "DuckDuckGo HTML search", note: "Используются поисковые фрагменты; полное извлечение страниц ещё не подключено." },
     imageUnderstanding: { state: hasVision ? "configured" : "unconfigured" },
     videoUnderstanding: { state: hasVision ? "configured" : "unconfigured", note: "Кадры выбираются локально; аудиодорожка пока не анализируется." },
-    offlineText: { state: "available", model: "Qwen2.5-0.5B-Instruct-q4f16_1-MLC" }
+    offlineText: { state: "available" }
   };
   return new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
 }
