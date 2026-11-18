@@ -8,6 +8,7 @@ import { createClient, type Session } from "@supabase/supabase-js";
 import { calculateMathQuestion } from "./lib/math";
 import { dataUrlToBase64, prepareImage, sampleVideoFrames } from "./lib/media";
 import { shouldSearchWeb } from "./lib/qq-ai-core";
+import { readOpenAIChatStream } from "./lib/openai-stream";
 
 type Message = { role: "user" | "assistant"; content: string; attachments?: Array<{ name: string; kind: "image" | "video" }> };
 type MediaAttachment = { id: string; file: File; name: string; kind: "image" | "video"; previewUrl: string };
@@ -294,7 +295,7 @@ export default function App() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        messages: [{ role: "system", content: SYSTEM + (memoryEnabled && memories.length ? "\nПользователь разрешил учитывать эти предпочтения: " + memories.join("; ") : "") }, ...history],
+        messages: [{ role: "system", content: SYSTEM + (memoryEnabled && memories.length ? "\\nПользователь разрешил учитывать эти предпочтения: " + memories.join("; ") : "") }, ...history],
       }),
     });
     if (!response.ok) {
@@ -302,29 +303,12 @@ export default function App() {
       throw new Error(body.error || `Облачный ИИ вернул ошибку ${response.status}.`);
     }
     if (!response.body) throw new Error("Сервер не вернул поток ответа.");
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let answer = "";
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-      for (const line of lines) {
-        if (!line.startsWith("data:")) continue;
-        const payload = line.slice(5).trim();
-        if (!payload || payload === "[DONE]") continue;
-        try {
-          const event = JSON.parse(payload);
-          answer += event.choices?.[0]?.delta?.content || "";
-          setMessages([...history, { role: "assistant", content: answer }]);
-        } catch { /* ignore incomplete/non-JSON SSE frames */ }
-      }
-    }
-    if (!answer.trim()) throw new Error("Облачная модель вернула пустой ответ.");
-    return answer;
+
+    let streamed = "";
+    return readOpenAIChatStream(response.body, (token) => {
+      streamed += token;
+      setMessages([...history, { role: "assistant", content: streamed }]);
+    });
   }
 
   async function sendOffline(history: Message[]) {
