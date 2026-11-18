@@ -317,7 +317,7 @@ export default function App() {
 
   async function sendOffline(history: Message[]) {
     if (!engine.current || !offlineReady) throw new Error("Локальная модель ещё не загружена. Нажми «Загрузить и запустить ИИ» на стартовом экране.");
-    const systemMessages: ChatMessage[] = [{
+    const systemMessages: Array<{ role: "system"; content: string }> = [{
       role: "system",
       content: SYSTEM + (memoryEnabled && memories.length ? "\nУчитывай предпочтения пользователя: " + memories.join("; ") : ""),
     }];
