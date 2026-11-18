@@ -181,7 +181,7 @@ export default function App() {
     Promise.all([
       supabase.from("qq_ai_threads").select("id,messages").order("updated_at", { ascending: false }).limit(1).maybeSingle(),
       supabase.from("qq_ai_preferences").select("memory_enabled,learned_preferences").eq("user_id", session.user.id).maybeSingle(),
-    ]).then(([threadResult, prefsResult]) => {
+    ]).then(async ([threadResult, prefsResult]) => {
       if (!alive) return;
       if (threadResult.data?.messages && Array.isArray(threadResult.data.messages)) {
         const cloudMessages = threadResult.data.messages as Message[];
@@ -216,8 +216,9 @@ export default function App() {
           if (syncMemoryError) setCloudStatus("Облако подключено частично");
         }
       }
+      if (!alive) return;
       setCloudLoaded(true);
-    }).catch(() => { setCloudStatus("Не удалось подключить облако"); setCloudLoaded(true); });
+    }).catch(() => { if (alive) { setCloudStatus("Не удалось подключить облако"); setCloudLoaded(true); } });
     return () => { alive = false; };
   }, [session?.user?.id]);
 
