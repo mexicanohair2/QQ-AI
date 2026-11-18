@@ -367,3 +367,93 @@ test("merges independent search results fairly and removes duplicate or unsafe U
   assert.equal(merged.length, 3);
   assert.equal(mergeSearchResults([[source("Unsafe", "http://unsafe.example", "unsafe.example")]]).length, 0);
 });
+
+test("search route calls both providers in parallel and returns deduplicated results", async () => {
+  const { default: searchHandler } = await import("../api/search.ts");
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const duckDuckGoHtml = `
+    <a class="result__a" href="https://one.example/article">DuckDuckGo result</a>
+    <a class="result__snippet">A useful source snippet.</a>
+  `;
+  const bingHtml = `
+    <li class="b_algo"><h2><a href="https://one.example/article#top">Duplicate result</a></h2><div class="b_caption"><p>Duplicate snippet.</p></div></li>
+    <li class="b_algo"><h2><a href="https://two.example/article">Bing result</a></h2><div class="b_caption"><p>Another source snippet.</p></div></li>
+  `;
+
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input));
+    calls.push(url.hostname);
+    if (url.hostname === "html.duckduckgo.com") return new Response(duckDuckGoHtml, { status: 200 });
+    if (url.hostname === "www.bing.com") return new Response(bingHtml, { status: 200 });
+    throw new Error("Unexpected provider host: " + url.hostname);
+  };
+
+  try {
+    const request = new Request("https://qq-ai.test/api/search", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://qq-ai.test" },
+      body: JSON.stringify({ query: "QQ AI test" }),
+    });
+    const response = await searchHandler(request);
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.deepEqual(calls.sort(), ["html.duckduckgo.com", "www.bing.com"]);
+    assert.deepEqual(body.providersUsed, ["DuckDuckGo", "Bing"]);
+    assert.deepEqual(body.sources.map(item => item.title), ["DuckDuckGo result", "Bing result"]);
+    assert.equal(body.sources[0].domain, "one.example");
+    assert.equal(body.sources.length, 2);
+    assert.equal(body.synthesizedByModel, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
+test("search route still succeeds when one provider is unavailable", async () => {
+  const { default: searchHandler } = await import("../api/search.ts");
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input));
+    if (url.hostname === "html.duckduckgo.com") return new Response("blocked", { status: 503 });
+    return new Response(
+      `<li class="b_algo"><h2><a href="https://available.example/article">Available result</a></h2><div class="b_caption"><p>Available snippet.</p></div></li>`,
+      { status: 200 },
+    );
+  };
+
+  try {
+    const request = new Request("https://qq-ai.test/api/search", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ query: "provider fallback" }),
+    });
+    const response = await searchHandler(request);
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.deepEqual(body.providersUsed, ["Bing"]);
+    assert.equal(body.sources[0].url, "https://available.example/article");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
+test("search route rejects a cross-origin request without contacting providers", async () => {
+  const { default: searchHandler } = await import("../api/search.ts");
+  const originalFetch = globalThis.fetch;
+  let fetchCalled = false;
+  globalThis.fetch = async () => { fetchCalled = true; throw new Error("should not be called"); };
+  try {
+    const request = new Request("https://qq-ai.test/api/search", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://attacker.example" },
+      body: JSON.stringify({ query: "blocked" }),
+    });
+    const response = await searchHandler(request);
+    assert.equal(response.status, 403);
+    assert.equal(fetchCalled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
