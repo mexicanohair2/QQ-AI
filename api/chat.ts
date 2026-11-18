@@ -76,6 +76,9 @@ function rejectCrossOrigin(request: Request): Response | null {
 export default async function handler(request: Request): Promise<Response> {
   if (request.method !== "POST") return json({ error: "Метод не поддерживается." }, 405);
 
+  const originError = rejectCrossOrigin(request);
+  if (originError) return originError;
+
   const endpoint = process.env.QQ_AI_API_URL?.trim();
   const model = process.env.QQ_AI_MODEL?.trim();
   const apiKey = process.env.QQ_AI_API_KEY?.trim();
