@@ -75,7 +75,7 @@ export function calculateMathQuestion(question: string): string | null {
     const percent = parseNumber(percentOf[1]);
     const total = parseNumber(percentOf[2]);
     const result = total * percent / 100;
-    return \`**Расчёт:** \${formatNumber(total)} × \${formatNumber(percent)} ÷ 100 = \${formatNumber(result)}.\n\n**Ответ: \${formatNumber(result)}**\`;
+    return \`**Расчёт:** ${formatNumber(total)} × ${formatNumber(percent)} ÷ 100 = ${formatNumber(result)}.\n\n**Ответ: ${formatNumber(result)}**\`;
   }
 
   const percentShare = normalized.match(new RegExp("(?:сколько\\s+)?процентов?\\s+(?:составляет|это|будет)\\s+(" + number + ")\\s+(?:от|из)\\s+(" + number + ")", "i"));
@@ -84,7 +84,7 @@ export function calculateMathQuestion(question: string): string | null {
     const total = parseNumber(percentShare[2]);
     if (total === 0) return "Нельзя вычислить процент от нуля: деление на ноль не определено.";
     const result = part / total * 100;
-    return \`**Расчёт:** \${formatNumber(part)} ÷ \${formatNumber(total)} × 100% = \${formatNumber(result)}%.\n\n**Ответ: \${formatNumber(result)}%**\`;
+    return \`**Расчёт:** ${formatNumber(part)} ÷ ${formatNumber(total)} × 100% = ${formatNumber(result)}%.\n\n**Ответ: ${formatNumber(result)}%**\`;
   }
 
   const discount = normalized.match(new RegExp("(" + number + ")\\s*(?:со\\s+скидкой|минус)\\s*(" + number + ")\\s*%", "i"));
@@ -92,7 +92,7 @@ export function calculateMathQuestion(question: string): string | null {
     const price = parseNumber(discount[1]);
     const percent = parseNumber(discount[2]);
     const result = price * (1 - percent / 100);
-    return \`Скидка \${formatNumber(percent)}% от \${formatNumber(price)} составляет \${formatNumber(price * percent / 100)}.\n\n**Итоговая цена: \${formatNumber(result)}**\`;
+    return \`Скидка ${formatNumber(percent)}% от ${formatNumber(price)} составляет ${formatNumber(price * percent / 100)}.\n\n**Итоговая цена: ${formatNumber(result)}**\`;
   }
 
   const ratio = normalized.match(new RegExp("(?:сократи|упрости|сократить)\\s+(?:отношение|пропорцию)\\s+(" + number + ")\\s*(?::|к)\\s*(" + number + ")", "i"));
@@ -101,7 +101,7 @@ export function calculateMathQuestion(question: string): string | null {
     const b = parseNumber(ratio[2]);
     if (!Number.isInteger(a) || !Number.isInteger(b) || a === 0 || b === 0) return null;
     const divisor = gcd(a, b);
-    return \`Делим обе части отношения \${formatNumber(a)} : \${formatNumber(b)} на \${divisor}.\n\n**Ответ: \${a / divisor} : \${b / divisor}**\`;
+    return \`Делим обе части отношения ${formatNumber(a)} : ${formatNumber(b)} на ${divisor}.\n\n**Ответ: ${a / divisor} : ${b / divisor}**\`;
   }
 
   let expression = normalized
@@ -121,7 +121,7 @@ export function calculateMathQuestion(question: string): string | null {
   try {
     const result = evaluateExpression(expression);
     if (result === null) return null;
-    return \`**Результат:** \${formatNumber(result)}\`;
+    return \`**Результат:** ${formatNumber(result)}\`;
   } catch (error) {
     return error instanceof Error ? error.message : "Не удалось выполнить вычисление.";
   }
