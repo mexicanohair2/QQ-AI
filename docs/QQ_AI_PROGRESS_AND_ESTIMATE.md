@@ -1,6 +1,6 @@
 # QQ AI — progress and realistic delivery estimate
 
-Last verified: 2026-11-18 (feature-branch commit `870358c576a1905182906750046a31049e03c73f`; CI run `44322333933` SUCCESS). This document describes the feature-branch preview, not a production release.
+Last verified: 2026-11-18 (feature-branch code commit `acc750110a738aefe6e9c4212f41c84b3176f8f4`; GitHub Actions run `44326427294` SUCCESS; Vercel preview `dpl_BecDsdZypcKpgNdcrXvyUBopNPjm` READY). This document describes the feature-branch preview, not a production release.
 
 ## Verified now
 
@@ -10,8 +10,8 @@ Last verified: 2026-11-18 (feature-branch commit `870358c576a1905182906750046a31
 - \`/api/capabilities\` returns HTTP 200 and reports:
   - QQ Online text model: unconfigured.
   - Web search: available through DuckDuckGo HTML result snippets.
-  - Image understanding: unconfigured.
-  - Video understanding: unconfigured.
+  - Cloud image/video understanding: unconfigured.
+  - Local browser Vision: implemented in a separate WebGPU worker; requires a compatible browser/device and an explicit model download.
   - Qwen offline: available in the browser when WebGPU and storage requirements are met.
 - The workflow verifies game-AI contracts, online/search/media tests, benchmark schema, training-data validator, TypeScript, and production build.
 - No physical Honor 400 test has been completed. HTTP 200 is not proof that microphone, camera, video sampling, or WebGPU work on the device.
@@ -24,8 +24,8 @@ Last verified: 2026-11-18 (feature-branch commit `870358c576a1905182906750046a31
 | Qwen Offline | Existing WebLLM integration | Real Honor 400 WebGPU and storage test |
 | QQ Online gateway | Server-side adapter and capability reporting implemented | Deploy an actual QQ model endpoint and verify streamed inference |
 | QQ Search | DuckDuckGo + Bing queried concurrently; deduplicated, sanitized results and source context; route tests use mocked provider responses | Live POST on deployed preview, full-page extraction and source corroboration |
-| Photos | Attachment UI, client preparation, protected server route contract | Deploy and test a compatible vision model; OCR/table/formula/chart acceptance |
-| Video | Local sampling of up to eight timestamped frames; audio is not uploaded | Vision inference for frames; separate audio transcription and synchronized audio/video analysis |
+| Photos | Local WebGPU Vision worker is integrated; cloud Vision route is still unconfigured | Test first download/inference on Honor 400; validate Russian OCR, tables, formulas, charts and image QA |
+| Video | Local mode samples up to four evenly distributed timestamped frames and analyzes them in the browser; audio is not uploaded | Device test, quality checks across clips, and separate audio transcription/synchronized audio-video analysis |
 | Voice | Browser speech-to-text prototype | Device/browser compatibility tests; separate audio conversation/transcription model |
 | QQ Knowledge | Product contracts/planning only | Document ingestion, indexing, retrieval, source attribution, access controls and deletion |
 | QQ-owned model | Candidate research, benchmark, data contract and validator | Select base/revision, curate approved data, train QQ checkpoint, evaluate, quantize and host |
@@ -272,3 +272,26 @@ A useful first online release is therefore measured in **weeks**, not hours. A s
 - Живой POST-запрос к deployed `/api/search` в этой проверке не выполнялся; автоматические тесты запускают сам route handler с контролируемыми upstream responses.
 - Preview/HTTP 200 не подтверждают работу микрофона, WebGPU, видеокадров или мобильную производительность на физическом устройстве.
 - PR остаётся draft; merge, production deployment, изменения QQCross и APK не выполнялись.
+
+
+## Обновление 18 ноября 2026 — локальный Vision в браузере
+
+### Реализация
+
+- Добавлен отдельный Web Worker `src/workers/local-vision.worker.ts` на Transformers.js; он не загружается в основной чат до явного действия пользователя.
+- Используется открытая модель `HuggingFaceTB/SmolVLM-256M-Instruct` из модели-карты Hugging Face (Apache 2.0): [модель и описание](https://huggingface.co/HuggingFaceTB/SmolVLM-256M-Instruct).
+- Выбирается квантованный WebGPU-вариант `q4f16` при наличии `shader-f16`, иначе `q4`. По текущим опубликованным файлам весов ориентировочный объём модели — около 190–270 МБ, дополнительно загружаются служебные файлы процессора и токенизатора.
+- Загрузка запускается только отдельной кнопкой. Прогресс показывается в интерфейсе. Фото и выбранные видеокадры передаются в Worker как data URL и не отправляются на сервер в локальном режиме.
+- Для локального видео используются до четырёх равномерно распределённых кадров; звуковая дорожка не анализируется.
+- В режиме Online при настроенном облачном Vision используется облачный маршрут; если он не настроен и пользователь явно загрузил локальный модуль, вложения обрабатываются локально. В режиме Offline используется только локальный модуль.
+- `/api/capabilities` теперь разделяет состояние облачного Vision и локального браузерного модуля: `imageUnderstanding`/`videoUnderstanding` описывают облачный сервер, `localVision` сообщает об интеграции WebGPU-модуля и его ограничениях.
+
+### Ограничения и проверки
+
+- SmolVLM-256M — очень небольшая англоязычная модель. Русский текст, OCR, мелкие детали, таблицы, формулы и сложные изображения могут распознаваться с ошибками; этот модуль нельзя считать эквивалентом сильной облачной Vision-модели.
+- GitHub Actions run `44326427294`: SUCCESS — 6/6 Game AI tests, 59/59 online/search/media/memory tests, TypeScript и production build.
+- Vercel preview `dpl_BecDsdZypcKpgNdcrXvyUBopNPjm` — READY на коммите `acc750110a738aefe6e9c4212f41c84b3176f8f4`.
+- Preview root, `/api/capabilities` и опубликованный Worker JS asset вернули HTTP 200.
+- Это подтверждает публикацию приложения и Worker, но **не подтверждает скачивание ONNX-весов, создание WebGPU-сессии и успешную генерацию** в мобильном браузере.
+- Физический запуск на Honor 400 не проводился. Совместимость GPU/браузера, объём памяти, прогрев модели, реальная задержка и качество русского OCR остаются открытыми.
+- QQ AI Online, серверная Vision-модель, анализ звука и полноценная мультимодальная модель не подключены.
