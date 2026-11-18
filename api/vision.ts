@@ -1,4 +1,4 @@
-import { readRequestTextLimited } from "../src/lib/bounded-response";
+import { readRequestTextLimited, readResponseTextLimited } from "../src/lib/bounded-response";
 
 export const config = { runtime: "edge" };
 
@@ -142,17 +142,36 @@ export default async function handler(request: Request): Promise<Response> {
     });
 
     if (!upstream.ok) {
-      return json({ error: "Vision-модель QQ AI ответила с ошибкой " + upstream.status + "." }, 502);
+      // Upstream diagnostics are untrusted and may contain private provider details.
+      try { await upstream.body?.cancel(); } catch { /* upstream may already be closed */ }
+      return json({ error: "Vision-модель QQ AI временно недоступна (ошибка шлюза провайдера)." }, 502);
     }
-    const result = await upstream.json() as {
+
+    let rawResult: string;
+    try {
+      rawResult = await readResponseTextLimited(upstream, 256_000);
+    } catch {
+      return json({ error: "Ответ vision-модели превышает допустимый размер или не удалось его прочитать." }, 502);
+    }
+
+    let result: {
       choices?: Array<{ message?: { content?: string | Array<{ text?: string }> } }>;
     };
+    try {
+      result = JSON.parse(rawResult) as typeof result;
+    } catch {
+      return json({ error: "Vision-модель QQ AI вернула некорректный формат ответа." }, 502);
+    }
+
     const rawAnswer = result.choices?.[0]?.message?.content;
     const answer = typeof rawAnswer === "string"
       ? rawAnswer
-      : Array.isArray(rawAnswer) ? rawAnswer.map(part => part.text || "").join("\n") : "";
+      : Array.isArray(rawAnswer)
+        ? rawAnswer.map(part => typeof part?.text === "string" ? part.text : "").join("\n")
+        : "";
 
     if (!answer.trim()) return json({ error: "Vision-модель QQ AI вернула пустой ответ." }, 502);
+    if (answer.length > 20_000) return json({ error: "Ответ vision-модели слишком длинный." }, 502);
     return json({
       answer,
       task: body.task,
