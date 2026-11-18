@@ -153,17 +153,24 @@ export default function App() {
       throw new Error("Дождись завершения загрузки локального распознавания речи.");
     }
 
+    let released = false;
     for (const runtime of getOtherLocalRuntimes(target)) {
       if (runtime === "text" && engine.current) {
         const previousEngine = engine.current;
         await previousEngine.unload();
         if (engine.current === previousEngine) engine.current = null;
         setOfflineReady(false);
+        released = true;
       } else if (runtime === "vision" && localVisionWorkerRef.current) {
         releaseLocalVisionWorker();
+        released = true;
       } else if (runtime === "speech" && localSpeechWorkerRef.current) {
         releaseLocalSpeechWorker();
+        released = true;
       }
+    }
+    if (released) {
+      setStatus("Освободили GPU-память предыдущей локальной модели; её файлы сохранены в кэше.");
     }
   }
   const bottom = useRef<HTMLDivElement>(null);
