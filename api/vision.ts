@@ -1,4 +1,4 @@
-import { readRequestTextLimited, readResponseTextLimited } from "../src/lib/bounded-response";
+import { readRequestTextLimited, readResponseTextLimited } from "../src/lib/bounded-response.ts";
 
 export const config = { runtime: "edge" };
 
@@ -37,10 +37,13 @@ export default async function handler(request: Request): Promise<Response> {
   if (request.method !== "POST") return json({ error: "Метод не поддерживается." }, 405);
 
   const origin = request.headers.get("origin");
-  const host = request.headers.get("host");
-  if (origin && host) {
+  const host = request.headers.get("host") || new URL(request.url).host;
+  if (origin) {
     try {
-      if (new URL(origin).host !== host) return json({ error: "Недопустимый источник запроса." }, 403);
+      const parsed = new URL(origin);
+      if (parsed.host !== host || !["https:", "http:"].includes(parsed.protocol)) {
+        return json({ error: "Недопустимый источник запроса." }, 403);
+      }
     } catch {
       return json({ error: "Некорректный источник запроса." }, 403);
     }
