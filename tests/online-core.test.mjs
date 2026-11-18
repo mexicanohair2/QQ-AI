@@ -18,3 +18,11 @@ test("capabilities distinguish online, vision, video and offline states", async 
   const source = await readFile(new URL("../api/capabilities.ts", import.meta.url), "utf8");
   for (const key of ["onlineText", "webSearch", "imageUnderstanding", "videoUnderstanding", "offlineText"]) assert.ok(source.includes(key));
 });
+test("vision gateway validates media and supports timestamped frames", async () => {
+  const source = await readFile(new URL("../api/vision.ts", import.meta.url), "utf8");
+  assert.match(source, /QQ_AI_VISION_API_URL/);
+  assert.match(source, /video_frames/);
+  assert.match(source, /timestampMs/);
+  assert.match(source, /7 \* 1024 \* 1024/);
+  assert.match(source, /mediaRetained: false/);
+});
