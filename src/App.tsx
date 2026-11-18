@@ -661,6 +661,10 @@ export default function App() {
           <div className="eyebrow">ЛИЧНЫЙ ИИ-ПОМОЩНИК</div>
           <h1>О чём <em>подумаем</em> сегодня?</h1>
           <p className="welcome-copy">Задавай вопросы, исследуй идеи и создавай новое. Переключайся между облачным интеллектом и локальной моделью.</p>
+          {mode === "online" && onlineModelReady === false && <div className="offline-card">
+            <div><b>Онлайн-модель пока не подключена</b><small>Сейчас доступны интернет-поиск и локальная Qwen после загрузки. Можно перейти в офлайн-режим.</small></div>
+            <button className="primary" onClick={() => { setMode("offline"); setStatus(offlineReady ? "Офлайн-модель готова" : "Сначала подготовь офлайн-модель"); }}>Открыть Qwen</button>
+          </div>}
           <div className="suggestions">
             <button onClick={() => setDraft("Помоги мне разобраться в новой теме и составь понятный план изучения.")}><span>✦</span><b>Разобраться в теме</b><small>Объяснение простыми словами</small></button>
             <button onClick={() => setDraft("Помоги придумать и развить интересную идею.")}><span>⌁</span><b>Развить идею</b><small>От задумки до плана</small></button>
@@ -685,7 +689,7 @@ export default function App() {
         </div>}
       </div>
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && <div className="error-banner">{error}{mode === "online" && onlineModelReady === false && error.includes("ещё не размещена") && <button className="secondary-button" onClick={() => { setMode("offline"); setError(""); setStatus(offlineReady ? "Офлайн-модель готова" : "Сначала подготовь офлайн-модель"); }}>Перейти к Qwen</button>}</div>}
       {mode === "offline" && !offlineReady && messages.length > 0 && <div className="offline-inline"><span>Офлайн-модель не загружена</span><button onClick={loadOfflineModel} disabled={busy}>Подготовить</button>{busy && <span>{progress}%</span>}</div>}
       {busy && <div className="task-running"><span className="task-running-dot" /><span><b>QQ AI выполняет задачу</b><small>Можно переключиться на другую вкладку. Не закрывай браузер, пока ответ не готов.</small></span></div>}
       <footer className="composer-area">
