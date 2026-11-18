@@ -29,6 +29,10 @@ export function decodeHtmlEntities(value: string): string {
     });
 }
 
+function escapeMarkdownLabel(value: string): string {
+  return value.replace(/([\\\x60*_{}\[\]()#+.!|>])/g, "\\\\$1");
+}
+
 function plainText(value: string): string {
   return decodeHtmlEntities(value.replace(/<[^>]*>/g, " "))
     .replace(/\s+/g, " ")
@@ -227,7 +231,7 @@ export function buildSearchOnlyAnswer(sources: QQSearchSource[]): string {
     "",
   ];
   sources.forEach((source, index) => {
-    lines.push((index + 1) + ". **[" + source.title + "](" + source.url + ")**");
+    lines.push((index + 1) + ". **[" + escapeMarkdownLabel(source.title) + "](<" + source.url + ">)**");
     lines.push(source.excerpt || "Поисковый фрагмент недоступен.");
     lines.push("Источник: " + source.domain);
     lines.push("");
