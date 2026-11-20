@@ -1,10 +1,29 @@
+import {
+  modelEndpointRequiresApiKey,
+  resolveModelApiKey,
+  safeModelEndpoint,
+} from "../src/lib/model-gateway.ts";
+
 export const config = { runtime: "edge" };
 export default async function handler(request: Request): Promise<Response> {
   if (request.method !== "GET") return new Response(JSON.stringify({ error: "Метод не поддерживается." }), { status: 405 });
-  const hasModel = Boolean(process.env.QQ_AI_API_URL?.trim() && process.env.QQ_AI_MODEL?.trim());
-  const hasVision = Boolean(process.env.QQ_AI_VISION_API_URL?.trim() && process.env.QQ_AI_VISION_MODEL?.trim());
+  const modelEndpoint = safeModelEndpoint(process.env.QQ_AI_API_URL?.trim());
+  const model = process.env.QQ_AI_MODEL?.trim();
+  const modelKey = resolveModelApiKey(process.env.QQ_AI_API_KEY, process.env.OPENAIAPIKEY);
+  const hasModel = Boolean(modelEndpoint && model &&
+    (!modelEndpointRequiresApiKey(modelEndpoint) || modelKey));
+
+  const visionEndpoint = safeModelEndpoint(process.env.QQ_AI_VISION_API_URL?.trim());
+  const visionModel = process.env.QQ_AI_VISION_MODEL?.trim();
+  const visionKey = resolveModelApiKey(
+    process.env.QQ_AI_VISION_API_KEY,
+    process.env.QQ_AI_API_KEY,
+    process.env.OPENAIAPIKEY,
+  );
+  const hasVision = Boolean(visionEndpoint && visionModel &&
+    (!modelEndpointRequiresApiKey(visionEndpoint) || visionKey));
   const body = {
-    onlineText: { state: hasModel ? "configured" : "unconfigured", model: hasModel ? process.env.QQ_AI_MODEL : null },
+    onlineText: { state: hasModel ? "configured" : "unconfigured", model: hasModel ? model : null },
     webSearch: { state: "available", provider: "DuckDuckGo HTML + Bing HTML", providers: ["DuckDuckGo", "Bing"], note: "Используются поисковые фрагменты; полное извлечение страниц и синтез облачной моделью ещё не подключены." },
     imageUnderstanding: { state: hasVision ? "configured" : "unconfigured", note: "Это статус облачной Vision-модели." },
     localVision: {
