@@ -62,9 +62,11 @@ test("browser media pipeline compresses images and uploads only sampled video fr
   assert.match(app, /исходный ролик/);
 });
 
-test("offline-first chat can answer locally and enrich current questions with real search sources", async () => {
+test("online-first chat opens online with the history sidebar closed and keeps offline as a manual mode", async () => {
   const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
-  assert.match(app, /useState<Mode>\("offline"\)/);
+  assert.match(app, /useState<Mode>\("online"\)/);
+  assert.match(app, /const \[sidebarVisible, setSidebarVisible\] = useState\(false\)/);
+  assert.doesNotMatch(app, /useState<Mode>\("offline"\)/);
   assert.match(app, /async function sendOffline\(history: Message\[\]\)/);
   assert.match(app, /if \(shouldSearchWeb\(lastUserMessage\)\)/);
   assert.match(app, /fetch\("\/api\/search"/);
