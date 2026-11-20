@@ -104,7 +104,7 @@ export default async function handler(request: Request): Promise<Response> {
     catch { return json({ error: "Некорректный JSON-запрос." }, 400); }
     if (!validMessages(body.messages)) return json({ error: "Некорректный формат диалога." }, 400);
 
-    const messages = body.messages.map(message => ({ role: message.role, content: message.content }));
+    const messages = body.messages.filter(message => message.role !== "system").map(message => ({ role: message.role, content: message.content }));
     const lastUser = [...messages].reverse().find(message => message.role === "user")?.content || "";
     const needsSearch = body.webSearch === true || shouldSearchWeb(lastUser);
     let sources: Awaited<ReturnType<typeof runSearch>> = [];
