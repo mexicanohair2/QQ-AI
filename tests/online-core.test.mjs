@@ -262,7 +262,7 @@ test("chat gateway never relays unbounded or provider-internal error bodies to t
   const source = await readFile(new URL("../api/chat.ts", import.meta.url), "utf8");
   const errorBranch = source.slice(source.indexOf("if (!upstream.ok)"), source.indexOf("if (!upstream.body)"));
   assert.match(errorBranch, /upstream\.body\?\.cancel\(\)/);
-  assert.match(errorBranch, /QQ_QUANTUM_UPSTREAM_ERROR/);
+  assert.match(errorBranch, /MODEL_UPSTREAM_ERROR/);
   assert.doesNotMatch(errorBranch, /upstream\.text\(\)|readResponseTextLimited/);
   assert.doesNotMatch(errorBranch, /detail|Authorization|apiKey|token/i);
 });
