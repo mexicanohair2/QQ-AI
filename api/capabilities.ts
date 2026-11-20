@@ -9,7 +9,7 @@ export default async function handler(request: Request): Promise<Response> {
   if (request.method !== "GET") return new Response(JSON.stringify({ error: "Метод не поддерживается." }), { status: 405 });
   const modelEndpoint = safeModelEndpoint(process.env.QQ_AI_API_URL?.trim());
   const model = process.env.QQ_AI_MODEL?.trim();
-  const modelKey = resolveModelApiKey(process.env.QQ_AI_API_KEY, process.env.OPENAIAPIKEY);
+  const modelKey = resolveModelApiKey(process.env.QQ_AI_API_KEY, process.env.DEEPSEEK_API_KEY, process.env.OPENAIAPIKEY);
   const hasModel = Boolean(modelEndpoint && model &&
     (!modelEndpointRequiresApiKey(modelEndpoint) || modelKey));
 
