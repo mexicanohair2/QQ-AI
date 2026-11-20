@@ -1,5 +1,11 @@
 import { readRequestTextLimited, readResponseTextLimited } from "../src/lib/bounded-response.ts";
 import {
+  buildChatCompletionPayload,
+  modelEndpointRequiresApiKey,
+  resolveModelApiKey,
+  safeModelEndpoint,
+} from "../src/lib/model-gateway.ts";
+import {
   buildSearchContext,
   parseDuckDuckGoResults,
   parseBingResults,
@@ -20,19 +26,6 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
     "X-Content-Type-Options": "nosniff",
   },
 });
-
-function safeModelEndpoint(raw: string): string | null {
-  try {
-    const url = new URL(raw);
-    if (url.protocol !== "https:" || url.username || url.password) return null;
-    const host = url.hostname.toLowerCase();
-    if (!host || host === "localhost" || host.endsWith(".local") || host.endsWith(".internal")) return null;
-    if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host) || host.includes(":")) return null;
-    return url.toString();
-  } catch {
-    return null;
-  }
-}
 
 function validMessages(value: unknown): value is ChatMessage[] {
   if (!Array.isArray(value) || value.length === 0 || value.length > 40) return false;
@@ -119,12 +112,12 @@ export default async function handler(request: Request): Promise<Response> {
 
   const endpoint = process.env.QQ_AI_API_URL?.trim();
   const model = process.env.QQ_AI_MODEL?.trim();
-  const apiKey = process.env.QQ_AI_API_KEY?.trim();
-  const safeEndpoint = endpoint ? safeModelEndpoint(endpoint) : null;
+  const safeEndpoint = safeModelEndpoint(endpoint);
+  const apiKey = resolveModelApiKey(process.env.QQ_AI_API_KEY, process.env.OPENAIAPIKEY);
 
-  if (!endpoint || !model || !safeEndpoint) {
+  if (!safeEndpoint || !model || (modelEndpointRequiresApiKey(safeEndpoint) && !apiKey)) {
     return json({
-      error: "Онлайн-модель QQ AI ещё не размещена. Серверный шлюз готов, но собственные веса модели пока не запущены на вычислительном сервере. Офлайн-Qwen работает отдельно.",
+      error: "Онлайн-модель QQ AI не настроена. Проверь адрес API, название модели и серверный ключ провайдера.",
       code: "ONLINE_MODEL_UNCONFIGURED",
     }, 503);
   }
@@ -171,13 +164,14 @@ export default async function handler(request: Request): Promise<Response> {
       method: "POST",
       headers,
       signal: controller.signal,
-      body: JSON.stringify({
+      body: JSON.stringify(buildChatCompletionPayload({
+        endpoint: safeEndpoint,
         model,
         messages,
         temperature: 0.7,
-        max_tokens: 2400,
+        maxOutputTokens: 2400,
         stream: true,
-      }),
+      })),
     });
 
     if (!upstream.ok) {
