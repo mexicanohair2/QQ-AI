@@ -25,7 +25,7 @@ export default async function handler(request: Request): Promise<Response> {
     (!modelEndpointRequiresApiKey(visionEndpoint) || visionKey));
   const body = {
     onlineText: { state: hasModel ? "configured" : "unconfigured", model: hasModel ? model : null },
-    webSearch: { state: "available", provider: "DuckDuckGo HTML + Bing HTML", providers: ["DuckDuckGo", "Bing"], note: "Используются поисковые фрагменты; полное извлечение страниц и синтез облачной моделью ещё не подключены." },
+    webSearch: { state: "available", provider: "DuckDuckGo HTML + Bing HTML + Wikimedia API", providers: ["DuckDuckGo", "Bing", "Wikipedia (RU)"], note: "Используются поисковые фрагменты из открытых поисковых систем и русской Википедии; полное извлечение страниц и синтез облачной моделью ещё не подключены." },
     imageUnderstanding: { state: hasVision ? "configured" : "unconfigured", note: "Это статус облачной Vision-модели." },
     localVision: {
       state: "implemented_device_check_required",
