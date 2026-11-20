@@ -71,9 +71,9 @@ def format_search_context(messages):
     if not context:
         return None
     results = []
-    for block in context.split("\\n\\n"):
+    for block in context.split("\n\n"):
         lines = block.splitlines()
-        if not lines or not re.match(r"^\\[\\d+\\] ", lines[0]):
+        if not lines or not re.match(r"^\[\d+\] ", lines[0]):
             continue
         title = lines[0].split("] ", 1)[1].strip()[:300]
         url = next((line[5:].strip() for line in lines if line.startswith("URL: ")), "")
@@ -100,7 +100,7 @@ def format_search_context(messages):
             lines.append("Домен: " + domain)
         lines.append("Фрагмент: " + (excerpt or "Фрагмент недоступен."))
         lines.append("")
-    return "\\n".join(lines).strip()
+    return "\n".join(lines).strip()
 
 def answer_query(messages):
     last = next((m.get("content", "") for m in reversed(messages) if m.get("role") == "user"), "")
@@ -112,7 +112,7 @@ def answer_query(messages):
     known = find_answer(last, QA)
     if known:
         return known
-    prompt = "Ты QQ Quantum. Ответь на русском кратко и точно.\\nПользователь: " + last[:500] + "\\nQQ Quantum:"
+    prompt = "Ты QQ Quantum. Ответь на русском кратко и точно.\nПользователь: " + last[:500] + "\nQQ Quantum:"
     ids = torch.tensor([TOKENIZER.encode(prompt, add_bos=True)], dtype=torch.long)
     with torch.inference_mode():
         output = MODEL.generate(ids, max_new_tokens=48, temperature=0.65, top_k=24, eos_token_id=2)
