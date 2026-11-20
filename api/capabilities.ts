@@ -66,7 +66,7 @@ export default async function handler(request: Request): Promise<Response> {
       provider: "QQ Quantum local inference artifact not packaged",
       model: null,
       networkAccess: false,
-      note: "QQ Quantum Offline пока не подключена. Текущий локальный режим QQ AI отдельно использует Qwen через WebLLM и не является собственной моделью QQ Quantum.",
+      note: "QQ Quantum Offline пока не подключена. Существующий локальный режим QQ AI работает отдельно и не является собственной моделью QQ Quantum.",
     },
     legacyLocalText: {
       state: "available",
