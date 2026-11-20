@@ -62,17 +62,14 @@ export default async function handler(request: Request): Promise<Response> {
     },
     videoUnderstanding: { state: hasVision ? "configured" : "unconfigured", note: "Облачная модель не подключена. Локальный режим может анализировать до четырёх выбранных кадров с временными отметками; аудиодорожка не анализируется." },
     offlineText: {
-      state: "unconfigured",
-      provider: "QQ Quantum local inference artifact not packaged",
-      model: null,
+      state: "implemented_import_required",
+      provider: "own QQ Quantum browser Transformer",
+      runtime: "pure JavaScript Web Worker",
+      packageFormat: "QQ_Quantum_Offline.html",
+      storage: "IndexedDB",
+      requiresModelImport: true,
       networkAccess: false,
-      note: "QQ Quantum Offline пока не подключена. Существующий локальный режим QQ AI работает отдельно и не является собственной моделью QQ Quantum.",
-    },
-    legacyLocalText: {
-      state: "available",
-      provider: "Qwen2.5-0.5B via WebLLM",
-      networkAccess: false,
-      note: "Существующий локальный резервный режим QQ AI. Не считать его QQ Quantum.",
+      note: "Собственная локальная модель реализована. Импортируй официальный автономный HTML-пакет QQ Quantum, затем загрузи его в Worker. После сохранения в IndexedDB ответы формируются без сетевых запросов. Физический тест Android ещё не проведён.",
     },
   };
   return new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });

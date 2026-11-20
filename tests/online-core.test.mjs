@@ -356,17 +356,18 @@ test("offline chat does not append a user message before the local model is read
   assert.match(app, /mode === "offline" && !offlineReady\)[\s\S]*?Сначала нажми «Загрузить и запустить ИИ»[\s\S]*?return;/);
 });
 
-test("capabilities distinguish QQ Quantum Offline from the legacy Qwen runtime", async () => {
-  const capabilities = await readFile(new URL("../api/capabilities.ts", import.meta.url), "utf8");
-  const offlineStart = capabilities.indexOf("offlineText:");
-  const legacyStart = capabilities.indexOf("legacyLocalText:", offlineStart);
-  assert.ok(offlineStart >= 0 && legacyStart > offlineStart);
-  const offline = capabilities.slice(offlineStart, legacyStart);
-  const legacy = capabilities.slice(legacyStart);
-  assert.match(offline, /state: "unconfigured"/);
-  assert.doesNotMatch(offline, /Qwen/i);
-  assert.match(legacy, /state: "available"/);
-  assert.match(legacy, /Qwen2\.5-0\.5B via WebLLM/);
+test("QQ Quantum Offline capability reflects the imported own JavaScript runtime", async () => {
+  const source = await readFile(new URL("../api/capabilities.ts", import.meta.url), "utf8");
+  const start = source.indexOf("offlineText:");
+  const end = source.indexOf("\n  };", start);
+  assert.ok(start >= 0 && end > start);
+  const offline = source.slice(start, end);
+  assert.match(offline, /state: "implemented_import_required"/);
+  assert.match(offline, /provider: "own QQ Quantum browser Transformer"/);
+  assert.match(offline, /packageFormat: "QQ_Quantum_Offline\.html"/);
+  assert.match(offline, /requiresModelImport: true/);
+  assert.match(offline, /networkAccess: false/);
+  assert.doesNotMatch(offline, /Qwen|DeepSeek|OpenAI/i);
 });
 
 
@@ -975,4 +976,50 @@ test("QQ Quantum offline HTML parser rejects malformed or oversized model assets
       JSON.stringify(invalid) + ";</script>"),
     /официальной автономной сборк/i,
   );
+});
+
+test("QQ Quantum browser Transformer matches Python logits using the same exported weights", async () => {
+  const fixture = JSON.parse(await readFile(
+    new URL("./fixtures/qq-quantum-browser-parity.json", import.meta.url),
+    "utf8",
+  ));
+  const { parseQuantumModelHtmlText } = await import("../src/lib/qq-quantum-assets.ts");
+  await import("../src/lib/qq-quantum-browser-runtime.js");
+
+  const html = "<!doctype html><html><script>const QQ_ASSETS = " +
+    JSON.stringify(fixture.assets) + ";</script></html>";
+  const imported = parseQuantumModelHtmlText(html);
+  assert.equal(imported.metadata.format, "qq-quantum-web-weights-v1");
+
+  const browser = globalThis.QQQuantumBrowser;
+  assert.ok(browser, "browser runtime should attach to globalThis");
+  const weights = await browser.inflateGzipBase64(imported.weights_gzip_base64);
+  assert.equal(weights.byteLength, imported.metadata.weight_bytes);
+
+  const tokenizer = new browser.ByteBPETokenizer(imported.tokenizer);
+  const encoded = tokenizer.encode(fixture.prompt, true, false);
+  assert.deepEqual(encoded, fixture.token_ids);
+  assert.equal(tokenizer.decode(encoded.slice(1)), fixture.prompt);
+
+  const model = new browser.QuantumBrowserModel(imported.metadata, weights);
+  const output = model.prefill(encoded);
+  assert.equal(output.logits.length, fixture.expected_logits.length);
+  let maxDifference = 0;
+  for (let i = 0; i < output.logits.length; i += 1) {
+    maxDifference = Math.max(maxDifference, Math.abs(output.logits[i] - fixture.expected_logits[i]));
+  }
+  assert.ok(
+    maxDifference <= fixture.expected_logit_tolerance,
+    "browser/Python logit max difference " + maxDifference + " exceeds " + fixture.expected_logit_tolerance,
+  );
+
+  const originalRandom = Math.random;
+  try {
+    Math.random = () => 0.37;
+    const generated = model.generate(encoded, 4, 0.8, 10, 2);
+    assert.ok(generated.length > 0 && generated.length <= 4);
+    assert.ok(generated.every(token => Number.isInteger(token) && token >= 0 && token < imported.metadata.model_config.vocab_size));
+  } finally {
+    Math.random = originalRandom;
+  }
 });

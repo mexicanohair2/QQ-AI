@@ -70,6 +70,17 @@ A separate pre-existing local artifact used by qq_quantum/serve_online.py was al
 
 This is a separate checkpoint from the 31,200-parameter smoke run in this report. The running experimental server returned HTTP 200 for an exact corpus Q&A match and valid SSE termination; an unauthorised request returned 401. For a question outside the 65-entry Q&A retrieval set, the service refused to return its low-quality free-generation output. Thus the HTTP/auth/retrieval path works, while general free-form answer quality remains inadequate. The server is running only inside the temporary Vercel Sandbox and is not wired to the public QQ-AI Preview deployment.
 
+## Offline HTML package
+
+The recovered 478,720-parameter checkpoint was exported to a self-contained browser package:
+- File: `QQ_Quantum_Offline.html`
+- HTML size: 2,753,706 bytes (below the 8 MiB importer limit)
+- Raw Float32 tensor buffer: 2,177,024 bytes across 29 state entries
+- Gzip/base64 weights field: 2,690,680 characters (below the 6 MiB importer field limit)
+- Tensor-buffer SHA-256: `d0339677487f04f3269d3e123777b6b0fbba6c59e95a82c0d17b66c5e0cadb08`
+- HTML SHA-256: `e24b5da1a2d477bc250c6c4682dd2b8613cec6ec672d161320a76225b3a45255`
+
+The Vite integration installs the dedicated JavaScript Worker/runtime, and the UI imports this file into IndexedDB. A small deterministic Python reference fixture has been prepared for the JavaScript runtime parity test. A real Android device has not yet been tested.
 ## Validation performed
 
 - 7 QQ Quantum core tests passed: Unicode/BPE round-trip, token persistence, special-token behavior, plain/gzip/base64-gzip corpus loading, Transformer output and causal mask, invalid configuration rejection, CPU training/checkpoint/resume/generation. The resume test also compares exact model tensors against uninterrupted training.
