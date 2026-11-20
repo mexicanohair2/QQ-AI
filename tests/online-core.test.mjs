@@ -864,6 +864,6 @@ test("DeepSeek API key alias is server-side and uses the documented Chat Complet
 test("chat, game, vision and capabilities accept the DeepSeek key only from server environment", async () => {
   const files = ["../api/chat.ts", "../api/game-assistant.ts", "../api/vision.ts", "../api/capabilities.ts"];
   const sources = await Promise.all(files.map(path => readFile(new URL(path, import.meta.url), "utf8")));
-  for (const source of sources) assert.match(source, /process\\.env\\.DEEPSEEK_API_KEY/);
+  for (const source of sources) assert.match(source, /process\.env\.DEEPSEEK_API_KEY/);
   assert.doesNotMatch(sources[0], /VITE_DEEPSEEK_API_KEY|console\\.(?:log|info|warn|error).*apiKey/);
 });
