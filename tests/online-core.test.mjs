@@ -925,3 +925,47 @@ test("legacy game and separate vision keys remain server-only; QQ Quantum chat r
   for (const source of sources) assert.ok(source.includes("process.env.DEEPSEEK_API_KEY"));
   assert.ok(!/VITE_DEEPSEEK_API_KEY|console\\.(?:log|info|warn|error).*apiKey/.test(sources[0]));
 });
+
+test("QQ Quantum offline HTML parser extracts nested JSON without evaluating scripts", async () => {
+  const { parseQuantumModelHtmlText } = await import("../src/lib/qq-quantum-assets.ts");
+  const assets = {
+    metadata: {
+      format: "qq-quantum-web-weights-v1",
+      training_step: 1000,
+      weight_bytes: 4,
+      model_config: { vocab_size: 261, block_size: 8, n_layer: 1, n_head: 1, n_embd: 4 },
+      tensors: { test: { offset: 0, length: 1, shape: [1] } },
+    },
+    tokenizer: { format: "qq-byte-bpe-v1", real_size: 261 },
+    corpus: 'Nested braces {inside} and escaped quote: "ok".',
+    weights_gzip_base64: "YQ==",
+  };
+  const html = "<!doctype html><html><script>const QQ_ASSETS = " +
+    JSON.stringify(assets) + ";</script></html>";
+  const parsed = parseQuantumModelHtmlText(html);
+  assert.deepEqual(parsed, assets);
+});
+
+test("QQ Quantum offline HTML parser rejects malformed or oversized model assets", async () => {
+  const { parseQuantumModelHtmlText } = await import("../src/lib/qq-quantum-assets.ts");
+  assert.throws(
+    () => parseQuantumModelHtmlText("<!doctype html><script>const QQ_ASSETS = { broken;</script>"),
+    /обрезаны|повреждены|неправильную структуру/i,
+  );
+  const invalid = {
+    metadata: {
+      format: "not-quantum",
+      weight_bytes: 4,
+      model_config: { vocab_size: 261, block_size: 8, n_layer: 1, n_head: 1, n_embd: 4 },
+      tensors: {},
+    },
+    tokenizer: { format: "qq-byte-bpe-v1" },
+    corpus: "",
+    weights_gzip_base64: "YQ==",
+  };
+  assert.throws(
+    () => parseQuantumModelHtmlText("<!doctype html><script>const QQ_ASSETS = " +
+      JSON.stringify(invalid) + ";</script>"),
+    /официальной автономной сборки/i,
+  );
+});
