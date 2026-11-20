@@ -107,10 +107,10 @@ export function parseQuantumModelHtmlText(html: string): QuantumBrowserAssets {
   if (!/<!doctype html/i.test(html.slice(0, 256))) {
     throw new Error("Файл не похож на автономную HTML-сборку QQ Quantum.");
   }
-  const marker = /const\\s+QQ_ASSETS\\s*=\\s*/i.exec(html);
+  const marker = /const\s+QQ_ASSETS\s*=\s*/i.exec(html);
   if (!marker) throw new Error("Не удалось найти встроенные данные QQ Quantum в HTML-файле.");
   let start = marker.index + marker[0].length;
-  while (/\\s/.test(html[start] ?? "")) start += 1;
+  while (/\s/.test(html[start] ?? "")) start += 1;
   if (html[start] !== "{") throw new Error("Встроенные данные QQ Quantum имеют неправильный формат.");
 
   // Extract the complete JSON object without evaluating any HTML/JavaScript.
@@ -123,7 +123,7 @@ export function parseQuantumModelHtmlText(html: string): QuantumBrowserAssets {
     const char = html[index];
     if (inString) {
       if (escaped) escaped = false;
-      else if (char === "\\\\\\\\") escaped = true;
+      else if (char === "\\") escaped = true;
       else if (char === '"') inString = false;
       continue;
     }
