@@ -86,10 +86,12 @@ function validateAssets(value: unknown): asserts value is QuantumBrowserAssets {
   }
   const weightBytes = Number(metadata.weight_bytes);
   const config = metadata.model_config as Record<string, unknown> | undefined;
+  const embd = Number(config?.n_embd);
+  const heads = Number(config?.n_head);
   if (!Number.isSafeInteger(weightBytes) || weightBytes <= 0 || weightBytes > 16 * 1024 * 1024 ||
       !config || !Number.isInteger(config.vocab_size) || !Number.isInteger(config.block_size) ||
-      !Number.isInteger(config.n_layer) || !Number.isInteger(config.n_head) ||
-      !Number.isInteger(config.n_embd) || config.n_embd! % config.n_head! !== 0) {
+      !Number.isInteger(config.n_layer) || !Number.isInteger(heads) ||
+      !Number.isInteger(embd) || heads < 1 || embd < 1 || embd % heads !== 0) {
     throw new Error("Конфигурация модели QQ Quantum не прошла проверку.");
   }
   if (!metadata.tensors || typeof metadata.tensors !== "object") {
