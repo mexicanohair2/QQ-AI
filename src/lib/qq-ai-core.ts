@@ -19,6 +19,7 @@ export function decodeHtmlEntities(value: string): string {
     .replace(/&#39;|&apos;/gi, "'")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
+    .replace(/&nbsp;/gi, " ")
     .replace(/&#x([0-9a-f]+);/gi, (_match, code: string) => {
       const point = Number.parseInt(code, 16);
       return Number.isFinite(point) && point <= 0x10ffff ? String.fromCodePoint(point) : "";
@@ -40,6 +41,42 @@ function plainText(value: string): string {
     .replace(/([([{])\s+/g, "$1")
     .replace(/\s+([)\]}])/g, "$1")
     .trim();
+}
+
+/**
+ * Parses the public Russian Wikipedia search API response.
+ * Only page IDs and text snippets supplied by Wikimedia are used; links always
+ * point back to the canonical Wikimedia host.
+ */
+export function parseMediaWikiResults(items: unknown, retrievedAt = new Date().toISOString()): QQSearchSource[] {
+  if (!Array.isArray(items)) return [];
+  const results: QQSearchSource[] = [];
+  const seen = new Set<number>();
+
+  for (const item of items) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as { pageid?: unknown; title?: unknown; snippet?: unknown };
+    const pageId = typeof record.pageid === "number" ? record.pageid : Number(record.pageid);
+    if (!Number.isSafeInteger(pageId) || pageId <= 0 || seen.has(pageId)) continue;
+    if (typeof record.title !== "string" || !record.title.trim()) continue;
+
+    const url = normalizeSearchUrl("https://ru.wikipedia.org/?curid=" + pageId);
+    if (!url) continue;
+    const title = plainText(record.title).slice(0, 180);
+    if (!title) continue;
+    const excerpt = typeof record.snippet === "string" ? plainText(record.snippet).slice(0, 420) : "";
+
+    seen.add(pageId);
+    results.push({
+      title,
+      url,
+      domain: "ru.wikipedia.org",
+      retrievedAt,
+      excerpt,
+    });
+    if (results.length >= 8) break;
+  }
+  return results;
 }
 
 function decodeBingRedirect(raw: string): string | null {

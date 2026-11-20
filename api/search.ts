@@ -3,6 +3,7 @@ import {
   buildSearchOnlyAnswer,
   parseBingResults,
   parseDuckDuckGoResults,
+  parseMediaWikiResults,
   mergeSearchResults,
 } from "../src/lib/qq-ai-core.ts";
 
@@ -58,6 +59,46 @@ export default async function handler(request: Request): Promise<Response> {
     ];
 
     const retrievedAt = new Date().toISOString();
+
+    // Run all free providers in parallel. Wikimedia is an independent fallback
+    // when HTML search engines block server-side requests or change their markup.
+    const wikipediaPromise = (async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5_000);
+      try {
+        const url = new URL("https://ru.wikipedia.org/w/api.php");
+        url.searchParams.set("action", "query");
+        url.searchParams.set("list", "search");
+        url.searchParams.set("srsearch", body.query.trim());
+        url.searchParams.set("srlimit", "8");
+        url.searchParams.set("srnamespace", "0");
+        url.searchParams.set("srprop", "snippet");
+        url.searchParams.set("format", "json");
+        url.searchParams.set("formatversion", "2");
+        url.searchParams.set("utf8", "1");
+
+        const response = await fetch(url.toString(), {
+          headers: {
+            "Accept": "application/json",
+            "Accept-Language": "ru,en;q=0.8",
+            "User-Agent": "QQAI/1.0 (https://github.com/mexicanohair2/QQ-AI)",
+          },
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          try { await response.body?.cancel(); } catch { /* upstream may already be closed */ }
+          return [];
+        }
+        const raw = await readResponseTextLimited(response, 500_000);
+        const data = JSON.parse(raw) as { query?: { search?: unknown } };
+        return parseMediaWikiResults(data.query?.search, retrievedAt);
+      } catch {
+        return [];
+      } finally {
+        clearTimeout(timeout);
+      }
+    })();
+
     const providerResults = await Promise.all(providers.map(async provider => {
       const providerController = new AbortController();
       const providerTimeout = setTimeout(() => providerController.abort(), 5_000);
@@ -88,16 +129,21 @@ export default async function handler(request: Request): Promise<Response> {
       }
     }));
 
-    const sources = mergeSearchResults(providerResults.map(result => result.sources), 8);
-    const providersUsed = providerResults
-      .filter(result => result.sources.length > 0)
-      .map(result => result.name);
+    const wikipediaSources = await wikipediaPromise;
+    const sources = mergeSearchResults([
+      ...providerResults.map(result => result.sources),
+      wikipediaSources,
+    ], 8);
+    const providersUsed = [
+      ...providerResults.filter(result => result.sources.length > 0).map(result => result.name),
+      ...(wikipediaSources.length > 0 ? ["Wikipedia (RU)"] : []),
+    ];
 
     if (!sources.length) {
       return json({
-        error: "Поисковые системы не вернули доступную выдачу. Попробуй переформулировать запрос или повторить позже.",
+        error: "Поисковые системы и справочная база не вернули доступных результатов. Попробуй уточнить запрос или повторить позже.",
         code: "SEARCH_PROVIDERS_UNAVAILABLE",
-        providersAttempted: providers.length,
+        providersAttempted: providers.length + 1,
       }, 502);
     }
 

@@ -7,6 +7,7 @@ import {
   normalizeSearchUrl,
   parseBingResults,
   parseDuckDuckGoResults,
+  parseMediaWikiResults,
   shouldSearchWeb,
 } from "../src/lib/qq-ai-core.ts";
 
@@ -46,6 +47,26 @@ test("parses, sanitizes and deduplicates real search result cards", () => {
   assert.equal(results[1].domain, "example.net");
   assert.equal(results[2].domain, "docs.example.com");
   assert.equal(results[0].retrievedAt, "2026-11-18T00:00:00.000Z");
+});
+
+test("parses Wikimedia search results safely and builds canonical HTTPS page links", () => {
+  const results = parseMediaWikiResults([
+    { pageid: 42, title: "NASA", snippet: 'Агентство <span class="searchmatch">NASA</span> и &nbsp; космос' },
+    { pageid: 42, title: "Дубликат", snippet: "Не показывать повторно" },
+    { pageid: -1, title: "Небезопасная запись", snippet: "Не должна попасть" },
+    { pageid: 51, title: "<script>alert(1)</script> Марс", snippet: "<b>Исследование</b> Марса" },
+    { pageid: "bad", title: "Некорректная запись", snippet: "Не должна попасть" },
+  ], "2026-11-20T12:00:00.000Z");
+
+  assert.equal(results.length, 2);
+  assert.equal(results[0].title, "NASA");
+  assert.equal(results[0].url, "https://ru.wikipedia.org/?curid=42");
+  assert.equal(results[0].domain, "ru.wikipedia.org");
+  assert.equal(results[0].excerpt, "Агентство NASA и космос");
+  assert.equal(results[1].title, "alert(1) Марс");
+  assert.equal(results[1].excerpt, "Исследование Марса");
+  assert.equal(results[0].retrievedAt, "2026-11-20T12:00:00.000Z");
+  assert.deepEqual(parseMediaWikiResults({ search: [] }), []);
 });
 
 test("search context treats snippets as untrusted evidence and builds source links", () => {

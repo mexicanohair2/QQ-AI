@@ -27,8 +27,8 @@ test("capabilities distinguish actual online, search, vision, video and offline 
   const source = await readFile(new URL("../api/capabilities.ts", import.meta.url), "utf8");
   for (const key of ["onlineText", "webSearch", "imageUnderstanding", "localVision", "localSpeech", "videoUnderstanding", "offlineText"]) assert.ok(source.includes(key));
   assert.match(source, /state: hasVision \? "configured" : "unconfigured"/);
-  assert.match(source, /DuckDuckGo HTML \+ Bing HTML/);
-  assert.match(source, /providers: \["DuckDuckGo", "Bing"\]/);
+  assert.match(source, /DuckDuckGo HTML \+ Bing HTML \+ Wikimedia API/);
+  assert.match(source, /providers: \["DuckDuckGo", "Bing", "Wikipedia \(RU\)"\]/);
   assert.match(source, /state: "implemented_device_check_required"/);
   assert.match(source, /runtime: "WebGPU browser worker"/);
   assert.match(source, /model: "onnx-community\/whisper-tiny"/);
@@ -62,9 +62,11 @@ test("browser media pipeline compresses images and uploads only sampled video fr
   assert.match(app, /исходный ролик/);
 });
 
-test("offline-first chat can answer locally and enrich current questions with real search sources", async () => {
+test("online-first chat opens online with the history sidebar closed and keeps offline as a manual mode", async () => {
   const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
-  assert.match(app, /useState<Mode>\("offline"\)/);
+  assert.match(app, /useState<Mode>\("online"\)/);
+  assert.match(app, /const \[sidebarVisible, setSidebarVisible\] = useState\(false\)/);
+  assert.doesNotMatch(app, /useState<Mode>\("offline"\)/);
   assert.match(app, /async function sendOffline\(history: Message\[\]\)/);
   assert.match(app, /if \(shouldSearchWeb\(lastUserMessage\)\)/);
   assert.match(app, /fetch\("\/api\/search"/);
@@ -89,6 +91,17 @@ test("QQCross Game AI uses the same QQ-owned online model gateway", async () => 
   assert.match(source, /authenticate\(request\)/);
 });
 
+
+test("manual QQ Search has a browser-side Wikimedia fallback and explains Supabase email links", async () => {
+  const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
+  assert.match(app, /Browser-side fallback: Wikimedia allows cross-origin requests with origin=\*/);
+  assert.match(app, /url\.searchParams\.set\("origin", "\*"\)/);
+  assert.match(app, /parseMediaWikiResults\(data\.query\?\.search\)/);
+  assert.match(app, /buildSearchOnlyAnswer\(sources\)/);
+  assert.match(app, /Ссылка должна вернуть тебя в QQ AI/);
+  assert.match(app, /Если ссылка открывает QQCross вместо QQ AI/);
+  assert.match(app, /emailRedirectTo: window\.location\.origin/);
+});
 
 test("manual QQ Search works independently of the online generation model", async () => {
   const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
@@ -162,19 +175,19 @@ test("chat gateway keeps its upstream timeout active for the lifetime of the res
 });
 
 
-test("welcome screen offers an explicit path to the offline model when online inference is unconfigured", async () => {
+test("welcome screen keeps online selected and never switches to offline automatically", async () => {
   const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
-  assert.match(app, /Онлайн-модель пока не подключена/);
-  assert.match(app, /Открыть локальный режим/);
-  assert.match(app, /Онлайн-режим не переключается автоматически/);
-  assert.match(app, /Открыть офлайн-режим/);
+  assert.match(app, /Онлайн-режим выбран, но модель не подключена/);
+  assert.match(app, /Офлайн-режим автоматически не включается/);
+  assert.match(app, /setMode\("offline"\)/);
+  assert.match(app, /Онлайн-модель QQ AI не настроена на сервере/);
 });
 
 
-test("capability-check failure remains unknown instead of falsely claiming no model is configured", async () => {
+test("capability-check failure remains unknown and reports an online connection check failure", async () => {
   const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
-  assert.match(app, /setOnlineModelReady\(null\); setVisionReady\(null\); setCapabilitiesUnavailable\(true\)/);
-  assert.match(app, /Не удалось проверить статус моделей/);
+  assert.match(app, /setOnlineModelReady\(null\);[\s\S]*setVisionReady\(null\);[\s\S]*setCapabilitiesUnavailable\(true\)/);
+  assert.match(app, /Не удалось проверить подключение к онлайн-модели/);
 });
 
 
@@ -369,7 +382,7 @@ test("online mode requires an explicit switch before using the local model", asy
   assert.ok(start >= 0 && end > start, "send handler should exist");
   const handler = app.slice(start, end);
   assert.match(handler, /mode === "online" && onlineModelReady === false/);
-  assert.match(handler, /Онлайн-режим не переключается автоматически/);
+  assert.match(handler, /Офлайн-режим автоматически не включается/);
   const onlineStart = handler.indexOf('else if (mode === "online")');
   const offlineStart = handler.indexOf('} else await sendOffline(next);', onlineStart);
   assert.ok(onlineStart >= 0 && offlineStart > onlineStart);
@@ -417,6 +430,7 @@ test("search route calls both providers in parallel and returns deduplicated res
     calls.push(url.hostname);
     if (url.hostname === "html.duckduckgo.com") return new Response(duckDuckGoHtml, { status: 200 });
     if (url.hostname === "www.bing.com") return new Response(bingHtml, { status: 200 });
+    if (url.hostname === "ru.wikipedia.org") return new Response(JSON.stringify({ query: { search: [] } }), { status: 200 });
     throw new Error("Unexpected provider host: " + url.hostname);
   };
 
@@ -429,7 +443,7 @@ test("search route calls both providers in parallel and returns deduplicated res
     const response = await searchHandler(request);
     const body = await response.json();
     assert.equal(response.status, 200);
-    assert.deepEqual(calls.sort(), ["html.duckduckgo.com", "www.bing.com"]);
+    assert.deepEqual(calls.sort(), ["html.duckduckgo.com", "ru.wikipedia.org", "www.bing.com"]);
     assert.deepEqual(body.providersUsed, ["DuckDuckGo", "Bing"]);
     assert.deepEqual(body.sources.map(item => item.title), ["DuckDuckGo result", "Bing result"]);
     assert.equal(body.sources[0].domain, "one.example");
@@ -539,6 +553,47 @@ test("vision route rejects a cross-origin request even when Host is absent", asy
   const response = await visionHandler(request);
   assert.equal(response.status, 403);
   assert.deepEqual(await response.json(), { error: "Недопустимый источник запроса." });
+});
+
+test("manual search returns Wikimedia sources when both HTML search providers are unavailable", async () => {
+  const { default: searchHandler } = await import("../api/search.ts");
+  const originalFetch = globalThis.fetch;
+  const requestedUrls = [];
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    requestedUrls.push(url);
+    if (url.includes("ru.wikipedia.org/w/api.php")) {
+      return new Response(JSON.stringify({
+        query: {
+          search: [
+            { pageid: 42, title: "NASA", snippet: "Космическое агентство" },
+            { pageid: 43, title: "Космос", snippet: "Исследование космического пространства" },
+          ],
+        },
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response("upstream unavailable", { status: 503 });
+  };
+
+  try {
+    const request = new Request("https://qq-ai.test/api/search", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://qq-ai.test" },
+      body: JSON.stringify({ query: "NASA" }),
+    });
+    const response = await searchHandler(request);
+    const result = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(result.providersUsed.includes("Wikipedia (RU)"), true);
+    assert.equal(result.sources.length, 2);
+    assert.equal(result.sources[0].url, "https://ru.wikipedia.org/?curid=42");
+    assert.equal(result.synthesizedByModel, false);
+    assert.ok(requestedUrls.some(url => url.includes("html.duckduckgo.com")));
+    assert.ok(requestedUrls.some(url => url.includes("www.bing.com/search")));
+    assert.ok(requestedUrls.some(url => url.includes("ru.wikipedia.org/w/api.php")));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("search route rejects a non-web origin even when its host matches", async () => {
@@ -758,7 +813,7 @@ test("online mode never silently falls back to the offline Qwen model", async ()
   assert.ok(onlineStart >= 0 && offlineStart > onlineStart, "online and offline routes should be distinct");
   const onlineBranch = handler.slice(onlineStart, offlineStart);
   assert.doesNotMatch(onlineBranch, /sendOffline|setMode\("offline"\)/);
-  assert.match(handler, /Онлайн-режим не переключается автоматически/);
+  assert.match(handler, /Офлайн-режим автоматически не включается/);
   assert.match(app, /mode === "online" && <button className="secondary-button"/);
 });
 
@@ -776,4 +831,94 @@ test("local model operations have bounded timeouts and worker crashes reset stal
   assert.match(app, /LOCAL_SPEECH_REQUEST_TIMEOUT_MS = 90_000/);
   assert.match(app, /localVisionWorkerRef\.current = null;\s*worker\.terminate\(\)/);
   assert.match(app, /localSpeechWorkerRef\.current = null;\s*worker\.terminate\(\)/);
+});
+
+
+test("OpenAI API key alias is read server-side and GPT-6 requests use compatible Chat Completions fields", async () => {
+  const {
+    buildChatCompletionPayload,
+    modelEndpointRequiresApiKey,
+    resolveModelApiKey,
+    safeModelEndpoint,
+  } = await import("../src/lib/model-gateway.ts");
+  const endpoint = "https://api.openai.com/v1/chat/completions";
+  assert.equal(safeModelEndpoint(endpoint), endpoint);
+  assert.equal(modelEndpointRequiresApiKey(endpoint), true);
+  assert.equal(resolveModelApiKey(undefined, "  secret-placeholder  "), "secret-placeholder");
+  const payload = buildChatCompletionPayload({
+    endpoint,
+    model: "gpt-6-luna",
+    messages: [{ role: "user", content: "Привет" }],
+    stream: true,
+    maxOutputTokens: 2400,
+    temperature: 0.7,
+  });
+  assert.equal(payload.max_completion_tokens, 2400);
+  assert.equal(payload.reasoning_effort, "low");
+  assert.equal(payload.stream, true);
+  assert.equal("max_tokens" in payload, false);
+  assert.equal("temperature" in payload, false);
+});
+
+test("non-OpenAI compatible gateways keep their existing request format", async () => {
+  const { buildChatCompletionPayload, modelEndpointRequiresApiKey } = await import("../src/lib/model-gateway.ts");
+  const endpoint = "https://inference.example.com/v1/chat/completions";
+  const payload = buildChatCompletionPayload({
+    endpoint,
+    model: "custom-model",
+    messages: [{ role: "user", content: "Привет" }],
+    stream: false,
+    maxOutputTokens: 900,
+    temperature: 0.25,
+  });
+  assert.equal(modelEndpointRequiresApiKey(endpoint), false);
+  assert.equal(payload.max_tokens, 900);
+  assert.equal(payload.temperature, 0.25);
+  assert.equal("max_completion_tokens" in payload, false);
+});
+
+test("chat and vision routes accept the protected OpenAI key alias without exposing it", async () => {
+  const chat = await readFile(new URL("../api/chat.ts", import.meta.url), "utf8");
+  const vision = await readFile(new URL("../api/vision.ts", import.meta.url), "utf8");
+  const capabilities = await readFile(new URL("../api/capabilities.ts", import.meta.url), "utf8");
+  assert.match(chat, /process\.env\.OPENAIAPIKEY/);
+  assert.match(vision, /process\.env\.OPENAIAPIKEY/);
+  assert.match(capabilities, /process\.env\.OPENAIAPIKEY/);
+  assert.doesNotMatch(chat, /VITE_OPENAIAPIKEY|console\.(?:log|info|warn|error).*apiKey/);
+});
+
+
+test("DeepSeek API key alias is server-side and uses the documented Chat Completions format", async () => {
+  const {
+    buildChatCompletionPayload,
+    isDeepSeekEndpoint,
+    modelEndpointRequiresApiKey,
+    resolveModelApiKey,
+    safeModelEndpoint,
+  } = await import("../src/lib/model-gateway.ts");
+  const endpoint = "https://api.deepseek.com/chat/completions";
+  assert.equal(safeModelEndpoint(endpoint), endpoint);
+  assert.equal(isDeepSeekEndpoint(endpoint), true);
+  assert.equal(modelEndpointRequiresApiKey(endpoint), true);
+  assert.equal(resolveModelApiKey(undefined, "  deepseek-secret-placeholder  "), "deepseek-secret-placeholder");
+  const payload = buildChatCompletionPayload({
+    endpoint,
+    model: "deepseek-flash",
+    messages: [{ role: "user", content: "Привет" }],
+    stream: true,
+    maxOutputTokens: 2400,
+    temperature: 0.7,
+  });
+  assert.equal(payload.model, "deepseek-flash");
+  assert.equal(payload.max_tokens, 2400);
+  assert.equal(payload.reasoning_effort, "low");
+  assert.equal(payload.stream, true);
+  assert.equal("max_completion_tokens" in payload, false);
+});
+
+test("chat, game, vision and capabilities accept the DeepSeek key only from server environment", async () => {
+  const files = ["../api/chat.ts", "../api/game-assistant.ts", "../api/vision.ts", "../api/capabilities.ts"];
+  const sources = await Promise.all(files.map(path => readFile(new URL(path, import.meta.url), "utf8")));
+  for (const source of sources) assert.match(source, /process\.env\.DEEPSEEK_API_KEY/);
+  assert.doesNotMatch(sources[0], /VITE_DEEPSEEK_API_KEY|console\\.(?:log|info|warn|error).*apiKey/);
 });

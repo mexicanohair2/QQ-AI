@@ -1,4 +1,10 @@
 import { readRequestTextLimited, readResponseTextLimited } from "../src/lib/bounded-response.ts";
+import {
+  buildChatCompletionPayload,
+  modelEndpointRequiresApiKey,
+  resolveModelApiKey,
+  safeModelEndpoint,
+} from "../src/lib/model-gateway.ts";
 
 export const config = { runtime: "edge" };
 
@@ -20,18 +26,7 @@ function validBase64(value: string): boolean {
     /^[A-Za-z0-9+/]+={0,2}$/.test(value);
 }
 
-function safeEndpoint(raw: string): string | null {
-  try {
-    const url = new URL(raw);
-    const host = url.hostname.toLowerCase();
-    if (url.protocol !== "https:" || url.username || url.password) return null;
-    if (!host || host === "localhost" || host.endsWith(".local") || host.endsWith(".internal")) return null;
-    if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host) || host.includes(":")) return null;
-    return url.toString();
-  } catch {
-    return null;
-  }
-}
+
 
 export default async function handler(request: Request): Promise<Response> {
   if (request.method !== "POST") return json({ error: "Метод не поддерживается." }, 405);
@@ -49,12 +44,16 @@ export default async function handler(request: Request): Promise<Response> {
     }
   }
 
-  const rawEndpoint = process.env.QQ_AI_VISION_API_URL?.trim();
-  const endpoint = rawEndpoint ? safeEndpoint(rawEndpoint) : null;
+  const endpoint = safeModelEndpoint(process.env.QQ_AI_VISION_API_URL?.trim());
   const model = process.env.QQ_AI_VISION_MODEL?.trim();
-  const apiKey = process.env.QQ_AI_VISION_API_KEY?.trim();
+  const apiKey = resolveModelApiKey(
+    process.env.QQ_AI_VISION_API_KEY,
+    process.env.QQ_AI_API_KEY,
+    process.env.DEEPSEEK_API_KEY,
+    process.env.OPENAIAPIKEY,
+  );
 
-  if (!endpoint || !model) {
+  if (!endpoint || !model || (modelEndpointRequiresApiKey(endpoint) && !apiKey)) {
     return json({
       error: "Модуль визуального анализа QQ AI ещё не подключён к собственной vision-модели.",
       code: "VISION_UNCONFIGURED",
@@ -130,10 +129,11 @@ export default async function handler(request: Request): Promise<Response> {
       method: "POST",
       headers,
       signal: controller.signal,
-      body: JSON.stringify({
+      body: JSON.stringify(buildChatCompletionPayload({
+        endpoint,
         model,
         stream: false,
-        max_tokens: 2200,
+        maxOutputTokens: 2200,
         messages: [
           {
             role: "system",
@@ -141,7 +141,7 @@ export default async function handler(request: Request): Promise<Response> {
           },
           { role: "user", content },
         ],
-      }),
+      })),
     });
 
     if (!upstream.ok) {

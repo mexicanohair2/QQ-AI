@@ -3,7 +3,7 @@ const MarkdownMessage = lazy(() => import("./components/MarkdownMessage"));
 import { createClient, type Session } from "@supabase/supabase-js";
 import { calculateMathQuestion } from "./lib/math";
 import { dataUrlToBase64, prepareImage, sampleVideoFrames } from "./lib/media";
-import { buildSearchContext, shouldSearchWeb, type QQSearchSource } from "./lib/qq-ai-core";
+import { buildSearchContext, buildSearchOnlyAnswer, parseMediaWikiResults, shouldSearchWeb, type QQSearchSource } from "./lib/qq-ai-core";
 import { readOpenAIChatStream } from "./lib/openai-stream";
 import { readChatMessages, persistChatMessages, readChatThreadId, persistChatThreadId, type ChatMessage } from "./lib/chat-storage";
 import { buildMemoryInstruction, normalizeMemoryEntries, readStoredMemories, persistStoredMemories, readStoredMemoryPreference, resolveMemoryEnabled, persistStoredMemoryEnabled, MAX_MEMORY_CHARS } from "./lib/user-memory";
@@ -49,8 +49,8 @@ function VoiceIcon() {
 
 export default function App() {
   const [messages, setMessages] = useState<Message[]>(() => readChatMessages(undefined, "anonymous"));
-  const [mode, setMode] = useState<Mode>("offline");
-  const [status, setStatus] = useState("Локальная модель ещё не загружена");
+  const [mode, setMode] = useState<Mode>("online");
+  const [status, setStatus] = useState("Проверяем подключение к онлайн-модели…");
   const [progress, setProgress] = useState(0);
   const [busy, setBusy] = useState(false);
   const [notifyOnComplete, setNotifyOnComplete] = useState(() => {
@@ -103,10 +103,7 @@ export default function App() {
   const [memoryDraft, setMemoryDraft] = useState("");
   const [memories, setMemories] = useState<string[]>(() => readStoredMemories(undefined, session?.user?.id ?? "anonymous"));
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [sidebarVisible, setSidebarVisible] = useState(() => {
-    try { return localStorage.getItem("qq-ai-sidebar-hidden") !== "1"; }
-    catch { return true; }
-  });
+  const [sidebarVisible, setSidebarVisible] = useState(false);
   const [threads, setThreads] = useState<Array<{id:string;title:string;updated_at:string}>>([]);
   const [cloudStatus, setCloudStatus] = useState("Только на этом устройстве");
   const [cloudLoaded, setCloudLoaded] = useState(false);
@@ -254,8 +251,16 @@ export default function App() {
       setOnlineModelReady(data.onlineText?.state === "configured");
       setVisionReady(data.imageUnderstanding?.state === "configured");
       setCapabilitiesUnavailable(false);
+      setStatus(data.onlineText?.state === "configured"
+        ? "Онлайн-модель подключена"
+        : "Онлайн-модель не настроена на сервере");
     }).catch(() => {
-      if (alive) { setOnlineModelReady(null); setVisionReady(null); setCapabilitiesUnavailable(true); }
+      if (alive) {
+        setOnlineModelReady(null);
+        setVisionReady(null);
+        setCapabilitiesUnavailable(true);
+        setStatus("Не удалось проверить подключение к онлайн-модели");
+      }
     });
     return () => { alive = false; };
   }, []);
@@ -419,17 +424,55 @@ export default function App() {
 
   async function sendSearchFallback(query: string): Promise<string> {
     setStatus("QQ Search ищет актуальные страницы…");
-    const response = await fetch("/api/search", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query }),
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(result.error || "QQ Search временно недоступен.");
-    if (typeof result.answer !== "string" || !result.answer.trim()) {
-      throw new Error("QQ Search не вернул результатов.");
+    let serverError = "Серверный поиск временно недоступен.";
+    try {
+      const response = await fetch("/api/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      });
+      const result = await response.json().catch(() => ({})) as { answer?: unknown; error?: string };
+      if (response.ok && typeof result.answer === "string" && result.answer.trim()) {
+        return result.answer;
+      }
+      serverError = result.error || `Серверный поиск вернул ошибку ${response.status}.`;
+    } catch (failure) {
+      serverError = failure instanceof Error ? failure.message : serverError;
     }
-    return result.answer;
+
+    // Browser-side fallback: Wikimedia allows cross-origin requests with origin=*.
+    // This keeps basic reference search available even if the Vercel edge route
+    // cannot reach upstream search providers.
+    setStatus("Пробуем независимый поиск по русской Википедии…");
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 8_000);
+    try {
+      const url = new URL("https://ru.wikipedia.org/w/api.php");
+      url.searchParams.set("action", "query");
+      url.searchParams.set("list", "search");
+      url.searchParams.set("srsearch", query.trim());
+      url.searchParams.set("srlimit", "8");
+      url.searchParams.set("srnamespace", "0");
+      url.searchParams.set("srprop", "snippet");
+      url.searchParams.set("format", "json");
+      url.searchParams.set("formatversion", "2");
+      url.searchParams.set("utf8", "1");
+      url.searchParams.set("origin", "*");
+      const response = await fetch(url.toString(), {
+        headers: { "Accept": "application/json" },
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error(`Wikimedia API: HTTP ${response.status}`);
+      const data = await response.json() as { query?: { search?: unknown } };
+      const sources = parseMediaWikiResults(data.query?.search);
+      if (sources.length) return buildSearchOnlyAnswer(sources);
+      throw new Error("Википедия не нашла подходящих страниц.");
+    } catch (failure) {
+      const detail = failure instanceof Error ? failure.message : "неизвестная ошибка";
+      throw new Error(`Поиск не сработал. Сервер: ${serverError} Резервный источник: ${detail}`);
+    } finally {
+      window.clearTimeout(timeout);
+    }
   }
 
   async function searchWeb() {
@@ -1334,7 +1377,7 @@ export default function App() {
             const searchAnswer = await sendSearchFallback(content);
             setMessages([...next, { role: "assistant", content: searchAnswer }]);
           } else {
-            throw new Error("Облачная модель QQ AI ещё не подключена. Онлайн-режим не переключается автоматически. Если хочешь использовать локальную модель, вручную выбери «Офлайн».");
+            throw new Error("Онлайн-модель QQ AI не настроена на сервере. Проверь адрес API, название модели и наличие серверного ключа DeepSeek для Preview. Офлайн-режим автоматически не включается.");
           }
         } else if (mode === "online") {
           try {
@@ -1359,13 +1402,13 @@ export default function App() {
   async function signIn() {
     if (!supabase) { setAuthMessage("Облачная база ещё не настроена."); return; }
     if (!email.includes("@")) { setAuthMessage("Введи корректный адрес электронной почты."); return; }
-    setAuthMessage("Отправляем ссылку для входа…");
+    setAuthMessage("Отправляем письмо для входа…");
     const { error: authError } = await supabase.auth.signInWithOtp({
       email: email.trim(),
       options: { shouldCreateUser: true, emailRedirectTo: window.location.origin },
     });
     if (authError) setAuthMessage(authError.message);
-    else { setOtpSent(true); setAuthMessage("Проверь почту: открой ссылку для входа или введи код, если письмо пришло с кодом."); }
+    else { setOtpSent(true); setAuthMessage("Письмо отправлено. Если в нём ссылка — открой её, чтобы войти; если 6-значный код — введи его ниже. Ссылка должна вернуть тебя в QQ AI."); }
   }
 
   async function verifyEmailCode() {
@@ -1492,8 +1535,7 @@ export default function App() {
           <h1>О чём <em>подумаем</em> сегодня?</h1>
           <p className="welcome-copy">Задавай вопросы, исследуй идеи и создавай новое. После загрузки локальная модель сможет отвечать прямо в браузере, а для актуальных тем искать источники в интернете.</p>
           {mode === "online" && onlineModelReady === false && <div className="offline-card">
-            <div><b>Онлайн-модель пока не подключена</b><small>Сейчас доступны интернет-поиск и локальная модель после загрузки. Можно перейти в офлайн-режим.</small></div>
-            <button className="primary" onClick={() => { setMode("offline"); setStatus(offlineReady ? "Офлайн-модель готова" : "Сначала подготовь офлайн-модель"); }}>Открыть локальный режим</button>
+            <div><b>Онлайн-режим выбран, но модель не подключена</b><small>Для ответов QQ AI нужен серверный ключ DeepSeek и настройки API. Интернет-поиск доступен отдельно. Офлайн-режим не включается автоматически.</small></div>
           </div>}
           <div className="suggestions">
             <button onClick={() => setDraft("Помоги мне разобраться в новой теме и составь понятный план изучения.")}><span>✦</span><b>Разобраться в теме</b><small>Объяснение простыми словами</small></button>
@@ -1567,7 +1609,7 @@ export default function App() {
     {authOpen && <div className="modal-backdrop" onClick={() => setAuthOpen(false)}><section className="modal" onClick={e => e.stopPropagation()}>
       <button className="modal-close" onClick={() => setAuthOpen(false)}>×</button><div className="modal-symbol">QQ</div><h2>{session ? "Аккаунт QQ AI" : "Синхронизация с облаком"}</h2>
       {session ? <><p>Вход выполнен: {session.user.email}. История и память синхронизируются с облаком.</p><button className="secondary-button" onClick={async () => { await supabase?.auth.signOut(); setAuthOpen(false); }}>Выйти</button></> :
-      <><p>Войди по электронной почте, чтобы сохранять диалоги и настройки между устройствами.</p><input className="modal-input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Электронная почта" disabled={otpSent} />{otpSent ? <><input className="modal-input" inputMode="numeric" value={otpCode} onChange={e => setOtpCode(e.target.value)} placeholder="Код из письма" /><button className="primary full" onClick={() => void verifyEmailCode()}>Подтвердить код</button><button className="secondary-button full" onClick={() => { setOtpSent(false); setOtpCode(""); setAuthMessage(""); }}>Изменить почту</button></> : <button className="primary full" onClick={() => void signIn()}>Получить код для входа</button>}<small>{authMessage}</small></>}
+      <><p>Войди по электронной почте, чтобы сохранять диалоги и настройки между устройствами. Supabase может прислать ссылку или одноразовый код. Если ссылка открывает QQCross вместо QQ AI, перенаправление нужно разрешить в настройках Supabase для адреса QQ AI.</p><input className="modal-input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Электронная почта" disabled={otpSent} />{otpSent ? <><input className="modal-input" inputMode="numeric" value={otpCode} onChange={e => setOtpCode(e.target.value)} placeholder="Код из письма" /><button className="primary full" onClick={() => void verifyEmailCode()}>Подтвердить код</button><button className="secondary-button full" onClick={() => { setOtpSent(false); setOtpCode(""); setAuthMessage(""); }}>Изменить почту</button></> : <button className="primary full" onClick={() => void signIn()}>Получить ссылку или код</button>}<small>{authMessage}</small></>}
     </section></div>}
 
     {settingsOpen && <div className="modal-backdrop" onClick={() => setSettingsOpen(false)}><section className="modal settings-modal" onClick={e => e.stopPropagation()}>
