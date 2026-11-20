@@ -1,10 +1,5 @@
 import { readRequestTextLimited, readResponseTextLimited } from "../src/lib/bounded-response.ts";
-import {
-  buildChatCompletionPayload,
-  modelEndpointRequiresApiKey,
-  resolveModelApiKey,
-  safeModelEndpoint,
-} from "../src/lib/model-gateway.ts";
+import { safeModelEndpoint } from "../src/lib/model-gateway.ts";
 import {
   buildSearchContext,
   parseDuckDuckGoResults,
@@ -40,24 +35,16 @@ function validMessages(value: unknown): value is ChatMessage[] {
 async function runSearch(query: string, signal: AbortSignal) {
   const encodedQuery = encodeURIComponent(query.slice(0, 300));
   const providers = [
-    {
-      url: "https://html.duckduckgo.com/html/?q=" + encodedQuery,
-      parse: parseDuckDuckGoResults,
-    },
-    {
-      url: "https://www.bing.com/search?q=" + encodedQuery + "&count=10&setlang=ru&cc=NL",
-      parse: parseBingResults,
-    },
+    { url: "https://html.duckduckgo.com/html/?q=" + encodedQuery, parse: parseDuckDuckGoResults },
+    { url: "https://www.bing.com/search?q=" + encodedQuery + "&count=10&setlang=ru&cc=NL", parse: parseBingResults },
   ];
   const retrievedAt = new Date().toISOString();
-
   const groups = await Promise.all(providers.map(async provider => {
-    const providerController = new AbortController();
-    const abortFromParent = () => providerController.abort();
-    if (signal.aborted) providerController.abort();
+    const controller = new AbortController();
+    const abortFromParent = () => controller.abort();
+    if (signal.aborted) controller.abort();
     else signal.addEventListener("abort", abortFromParent, { once: true });
-    const timeout = setTimeout(() => providerController.abort(), 4_500);
-
+    const timeout = setTimeout(() => controller.abort(), 4_500);
     try {
       const response = await fetch(provider.url, {
         headers: {
@@ -65,27 +52,14 @@ async function runSearch(query: string, signal: AbortSignal) {
           "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.8",
           "User-Agent": "Mozilla/5.0 (compatible; QQAI/1.0; +https://github.com/mexicanohair2/QQ-AI)",
         },
-        signal: providerController.signal,
+        signal: controller.signal,
       });
-      if (!response.ok) {
-        try { await response.body?.cancel(); } catch { /* upstream may already be closed */ }
-        return [];
-      }
-
-      try {
-        const html = await readResponseTextLimited(response, 2_500_000);
-        return provider.parse(html, retrievedAt);
-      } catch {
-        return [];
-      }
-    } catch {
-      return [];
-    } finally {
-      clearTimeout(timeout);
-      signal.removeEventListener("abort", abortFromParent);
-    }
+      if (!response.ok) { try { await response.body?.cancel(); } catch { /* closed */ } return []; }
+      try { return provider.parse(await readResponseTextLimited(response, 2_500_000), retrievedAt); }
+      catch { return []; }
+    } catch { return []; }
+    finally { clearTimeout(timeout); signal.removeEventListener("abort", abortFromParent); }
   }));
-
   return mergeSearchResults(groups, 8);
 }
 
@@ -99,33 +73,28 @@ function rejectCrossOrigin(request: Request): Response | null {
       return json({ error: "Недопустимый источник запроса." }, 403);
     }
     return null;
-  } catch {
-    return json({ error: "Некорректный источник запроса." }, 403);
-  }
+  } catch { return json({ error: "Некорректный источник запроса." }, 403); }
 }
 
 export default async function handler(request: Request): Promise<Response> {
   if (request.method !== "POST") return json({ error: "Метод не поддерживается." }, 405);
-
   const originError = rejectCrossOrigin(request);
   if (originError) return originError;
 
-  const endpoint = process.env.QQ_AI_API_URL?.trim();
-  const model = process.env.QQ_AI_MODEL?.trim();
-  const safeEndpoint = safeModelEndpoint(endpoint);
-  const apiKey = resolveModelApiKey(process.env.QQ_AI_API_KEY, process.env.DEEPSEEK_API_KEY, process.env.OPENAIAPIKEY);
-
-  if (!safeEndpoint || !model || (modelEndpointRequiresApiKey(safeEndpoint) && !apiKey)) {
+  // Only a separately hosted QQ Quantum inference service may power Online text.
+  // No OpenAI, DeepSeek, Qwen or generic provider fallback is permitted here.
+  const endpoint = safeModelEndpoint(process.env.QQ_QUANTUM_ONLINE_URL?.trim());
+  const token = process.env.QQ_QUANTUM_ONLINE_TOKEN?.trim();
+  if (!endpoint || !token) {
     return json({
-      error: "Онлайн-модель QQ AI не настроена. Проверь адрес API, название модели и серверный ключ провайдера.",
-      code: "ONLINE_MODEL_UNCONFIGURED",
+      error: "Собственная модель QQ Quantum Online ещё не подключена. Поиск работает отдельно; генерация через сторонние языковые модели отключена.",
+      code: "QQ_QUANTUM_ONLINE_UNAVAILABLE",
     }, 503);
   }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 55_000);
   let streamingResponse = false;
-
   try {
     let raw: string;
     try { raw = await readRequestTextLimited(request, 520_000); }
@@ -133,13 +102,12 @@ export default async function handler(request: Request): Promise<Response> {
     let body: RequestBody;
     try { body = JSON.parse(raw) as RequestBody; }
     catch { return json({ error: "Некорректный JSON-запрос." }, 400); }
-
     if (!validMessages(body.messages)) return json({ error: "Некорректный формат диалога." }, 400);
+
     const messages = body.messages.map(message => ({ role: message.role, content: message.content }));
     const lastUser = [...messages].reverse().find(message => message.role === "user")?.content || "";
     const needsSearch = body.webSearch === true || shouldSearchWeb(lastUser);
-    let sources = [];
-
+    let sources: Awaited<ReturnType<typeof runSearch>> = [];
     if (needsSearch) {
       try {
         sources = await runSearch(lastUser, controller.signal);
@@ -147,67 +115,59 @@ export default async function handler(request: Request): Promise<Response> {
           role: "system",
           content: sources.length
             ? buildSearchContext(sources)
-            : "Для вопроса требовался веб-поиск, но доступных проверяемых результатов не найдено. Не утверждай, что поиск дал подтверждение; предупреди об ограничении.",
+            : "Для запроса требовался веб-поиск, но проверяемые результаты не найдены. Не придумывай страницы и предупреди об ограничении.",
         });
       } catch {
         messages.unshift({
           role: "system",
-          content: "Веб-поиск для этого запроса временно не сработал. Не придумывай найденные страницы и честно предупреди, что не смог проверить актуальные данные.",
+          content: "Веб-поиск временно не сработал. Не выдумывай найденные страницы и предупреди, что не смог проверить актуальные данные.",
         });
       }
     }
 
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (apiKey) headers.Authorization = "Bearer " + apiKey;
-
-    const upstream = await fetch(safeEndpoint, {
+    const upstream = await fetch(endpoint, {
       method: "POST",
-      headers,
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
       signal: controller.signal,
-      body: JSON.stringify(buildChatCompletionPayload({
-        endpoint: safeEndpoint,
-        model,
+      body: JSON.stringify({
+        model: "qq-quantum-online",
         messages,
-        temperature: 0.7,
-        maxOutputTokens: 2400,
+        temperature: 0.65,
+        max_tokens: 1200,
         stream: true,
-      })),
+        search_context_attached: sources.length > 0,
+      }),
     });
-
     if (!upstream.ok) {
-      // Provider error bodies are untrusted, potentially unbounded, and may contain
-      // internal diagnostics. Do not relay them to the browser.
       try { await upstream.body?.cancel(); } catch { /* upstream may already be closed */ }
       return json({
-        error: "Собственная онлайн-модель QQ AI временно недоступна (ошибка шлюза провайдера).",
-        code: "MODEL_UPSTREAM_ERROR",
+        error: "Собственная онлайн-модель QQ Quantum временно недоступна.",
+        code: "QQ_QUANTUM_UPSTREAM_ERROR",
       }, 502);
     }
+    if (!upstream.body) return json({ error: "QQ Quantum Online не вернула поток ответа." }, 502);
 
-    if (!upstream.body) return json({ error: "Онлайн-модель не вернула поток ответа." }, 502);
-    const upstreamReader = upstream.body.getReader();
+    const reader = upstream.body.getReader();
     streamingResponse = true;
     const responseBody = new ReadableStream<Uint8Array>({
       async pull(streamController) {
         try {
-          const { done, value } = await upstreamReader.read();
+          const { done, value } = await reader.read();
           if (done) {
             streamController.close();
             clearTimeout(timeout);
             streamingResponse = false;
-          } else {
-            streamController.enqueue(value);
-          }
-        } catch (streamError) {
+          } else streamController.enqueue(value);
+        } catch (error) {
           clearTimeout(timeout);
           streamingResponse = false;
-          streamController.error(streamError);
+          streamController.error(error);
         }
       },
       async cancel(reason) {
         clearTimeout(timeout);
         streamingResponse = false;
-        try { await upstreamReader.cancel(reason); } catch { /* upstream may already be closed */ }
+        try { await reader.cancel(reason); } catch { /* upstream may be closed */ }
       },
     });
     return new Response(responseBody, {
@@ -221,9 +181,7 @@ export default async function handler(request: Request): Promise<Response> {
     });
   } catch (error) {
     const timedOut = error instanceof Error && error.name === "AbortError";
-    return json({
-      error: timedOut ? "Превышено время ожидания онлайн-модели или поиска." : "Не удалось выполнить онлайн-запрос QQ AI.",
-    }, timedOut ? 504 : 502);
+    return json({ error: timedOut ? "Превышено время ожидания QQ Quantum Online или поиска." : "Не удалось выполнить запрос к QQ Quantum Online." }, timedOut ? 504 : 502);
   } finally {
     if (!streamingResponse) clearTimeout(timeout);
   }
