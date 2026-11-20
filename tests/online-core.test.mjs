@@ -777,3 +777,57 @@ test("local model operations have bounded timeouts and worker crashes reset stal
   assert.match(app, /localVisionWorkerRef\.current = null;\s*worker\.terminate\(\)/);
   assert.match(app, /localSpeechWorkerRef\.current = null;\s*worker\.terminate\(\)/);
 });
+
+
+test("OpenAI API key alias is read server-side and GPT-6 requests use compatible Chat Completions fields", async () => {
+  const {
+    buildChatCompletionPayload,
+    modelEndpointRequiresApiKey,
+    resolveModelApiKey,
+    safeModelEndpoint,
+  } = await import("../src/lib/model-gateway.ts");
+  const endpoint = "https://api.openai.com/v1/chat/completions";
+  assert.equal(safeModelEndpoint(endpoint), endpoint);
+  assert.equal(modelEndpointRequiresApiKey(endpoint), true);
+  assert.equal(resolveModelApiKey(undefined, "  secret-placeholder  "), "secret-placeholder");
+  const payload = buildChatCompletionPayload({
+    endpoint,
+    model: "gpt-6-luna",
+    messages: [{ role: "user", content: "Привет" }],
+    stream: true,
+    maxOutputTokens: 2400,
+    temperature: 0.7,
+  });
+  assert.equal(payload.max_completion_tokens, 2400);
+  assert.equal(payload.reasoning_effort, "low");
+  assert.equal(payload.stream, true);
+  assert.equal("max_tokens" in payload, false);
+  assert.equal("temperature" in payload, false);
+});
+
+test("non-OpenAI compatible gateways keep their existing request format", async () => {
+  const { buildChatCompletionPayload, modelEndpointRequiresApiKey } = await import("../src/lib/model-gateway.ts");
+  const endpoint = "https://inference.example.com/v1/chat/completions";
+  const payload = buildChatCompletionPayload({
+    endpoint,
+    model: "custom-model",
+    messages: [{ role: "user", content: "Привет" }],
+    stream: false,
+    maxOutputTokens: 900,
+    temperature: 0.25,
+  });
+  assert.equal(modelEndpointRequiresApiKey(endpoint), false);
+  assert.equal(payload.max_tokens, 900);
+  assert.equal(payload.temperature, 0.25);
+  assert.equal("max_completion_tokens" in payload, false);
+});
+
+test("chat and vision routes accept the protected OpenAI key alias without exposing it", async () => {
+  const chat = await readFile(new URL("../api/chat.ts", import.meta.url), "utf8");
+  const vision = await readFile(new URL("../api/vision.ts", import.meta.url), "utf8");
+  const capabilities = await readFile(new URL("../api/capabilities.ts", import.meta.url), "utf8");
+  assert.match(chat, /process\.env\.OPENAIAPIKEY/);
+  assert.match(vision, /process\.env\.OPENAIAPIKEY/);
+  assert.match(capabilities, /process\.env\.OPENAIAPIKEY/);
+  assert.doesNotMatch(chat, /VITE_OPENAIAPIKEY|console\.(?:log|info|warn|error).*apiKey/);
+});
