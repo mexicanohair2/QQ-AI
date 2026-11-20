@@ -27,8 +27,8 @@ test("capabilities distinguish actual online, search, vision, video and offline 
   const source = await readFile(new URL("../api/capabilities.ts", import.meta.url), "utf8");
   for (const key of ["onlineText", "webSearch", "imageUnderstanding", "localVision", "localSpeech", "videoUnderstanding", "offlineText"]) assert.ok(source.includes(key));
   assert.match(source, /state: hasVision \? "configured" : "unconfigured"/);
-  assert.match(source, /DuckDuckGo HTML \+ Bing HTML/);
-  assert.match(source, /providers: \["DuckDuckGo", "Bing"\]/);
+  assert.match(source, /DuckDuckGo HTML \+ Bing HTML \+ Wikimedia API/);
+  assert.match(source, /providers: \["DuckDuckGo", "Bing", "Wikipedia \(RU\)"\]/);
   assert.match(source, /state: "implemented_device_check_required"/);
   assert.match(source, /runtime: "WebGPU browser worker"/);
   assert.match(source, /model: "onnx-community\/whisper-tiny"/);
