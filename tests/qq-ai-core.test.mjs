@@ -51,7 +51,7 @@ test("parses, sanitizes and deduplicates real search result cards", () => {
 
 test("parses Wikimedia search results safely and builds canonical HTTPS page links", () => {
   const results = parseMediaWikiResults([
-    { pageid: 42, title: "NASA", snippet: "Агентство <span class="searchmatch">NASA</span> и &nbsp; космос" },
+    { pageid: 42, title: "NASA", snippet: 'Агентство <span class="searchmatch">NASA</span> и &nbsp; космос' },
     { pageid: 42, title: "Дубликат", snippet: "Не показывать повторно" },
     { pageid: -1, title: "Небезопасная запись", snippet: "Не должна попасть" },
     { pageid: 51, title: "<script>alert(1)</script> Марс", snippet: "<b>Исследование</b> Марса" },
