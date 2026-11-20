@@ -1,4 +1,10 @@
 import { buildGameAiMessages, parseGameAiResult, validateGameAiRequest } from "../src/lib/qqcross-ai";
+import {
+  buildChatCompletionPayload,
+  modelEndpointRequiresApiKey,
+  resolveModelApiKey,
+  safeModelEndpoint,
+} from "../src/lib/model-gateway.ts";
 
 export const config = { runtime: "edge" };
 
@@ -53,19 +59,11 @@ export default async function handler(request: Request): Promise<Response> {
   if (cors === null) return json({ error: "Этот источник не разрешён для игрового ИИ." }, 403);
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
   if (request.method !== "POST") return json({ error: "Метод не поддерживается." }, 405, cors);
-  const apiKey = process.env.QQ_AI_API_KEY?.trim();
-  const endpoint = process.env.QQ_AI_API_URL?.trim();
+  const apiKey = resolveModelApiKey(process.env.QQ_AI_API_KEY, process.env.OPENAIAPIKEY);
+  const endpoint = safeModelEndpoint(process.env.QQ_AI_API_URL?.trim());
   const model = process.env.QQ_AI_MODEL?.trim();
-  let safeEndpoint: string | null = null;
-  try {
-    const parsed = endpoint ? new URL(endpoint) : null;
-    if (parsed && parsed.protocol === "https:" && !parsed.username && !parsed.password &&
-      parsed.hostname && parsed.hostname !== "localhost" && !parsed.hostname.endsWith(".local") &&
-      !parsed.hostname.endsWith(".internal") && !/^\d{1,3}(?:\.\d{1,3}){3}$/.test(parsed.hostname) &&
-      !parsed.hostname.includes(":")) safeEndpoint = parsed.toString();
-  } catch { /* invalid model URL */ }
-  if (!safeEndpoint || !model) {
-    return json({ error: "Игровой ИИ QQ пока недоступен: собственная онлайн-модель не размещена." }, 503, cors);
+  if (!endpoint || !model || (modelEndpointRequiresApiKey(endpoint) && !apiKey)) {
+    return json({ error: "Игровой ИИ QQ пока не настроен: проверь адрес API, модель и серверный ключ провайдера." }, 503, cors);
   }
 
   if (!(await authenticate(request))) return json({ error: "Для игрового ИИ нужен действующий вход QQCross/QQ AI." }, 401, cors);
@@ -85,13 +83,14 @@ export default async function handler(request: Request): Promise<Response> {
           "Content-Type": "application/json",
           ...(apiKey ? { Authorization: "Bearer " + apiKey } : {}),
         },
-        body: JSON.stringify({
+        body: JSON.stringify(buildChatCompletionPayload({
+          endpoint,
           model,
           messages: buildGameAiMessages(body.request),
           temperature: 0.25,
-          max_tokens: 900,
+          maxOutputTokens: 900,
           stream: false,
-        }),
+        })),
         signal: controller.signal,
       });
       if (!upstream.ok) {
