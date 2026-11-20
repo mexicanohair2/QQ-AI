@@ -2,14 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("online route is a project-owned model gateway, not a Cerebras proxy", async () => {
+test("online route accepts only the independent QQ Quantum model service", async () => {
   const source = await readFile(new URL("../api/chat.ts", import.meta.url), "utf8");
-  assert.match(source, /QQ_AI_API_URL/);
-  assert.match(source, /QQ_AI_MODEL/);
-  assert.match(source, /ONLINE_MODEL_UNCONFIGURED/);
+  assert.match(source, /QQ_QUANTUM_ONLINE_URL/);
+  assert.match(source, /QQ_QUANTUM_ONLINE_TOKEN/);
+  assert.match(source, /QQ_QUANTUM_ONLINE_UNAVAILABLE/);
   assert.match(source, /safeModelEndpoint/);
-  assert.doesNotMatch(source, /CEREBRAS_API_KEY/);
-  assert.match(source, /readRequestTextLimited\(request, 520_000\)/);
+  assert.doesNotMatch(source, /QQ_AI_API_URL|QQ_AI_MODEL|DEEPSEEK_API_KEY|OPENAIAPIKEY/);
+  assert.match(source, /readRequestTextLimited\\(request, 520_000\\)/);
 });
 
 test("web search is a separate real endpoint and is treated as untrusted evidence", async () => {
