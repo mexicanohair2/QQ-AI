@@ -65,14 +65,14 @@ This is visibly incoherent. Generation works technically, but language quality i
 A separate pre-existing local artifact used by qq_quantum/serve_online.py was also inspected and loaded:
 - 500 optimizer steps; 478,720 parameters; 2 Transformer layers, 4 heads, embedding width 128, block size 128;
 - train loss 3.1254632; validation loss 3.5017388;
-- checkpoint model-online-v1/latest.pt, 5,791,627 bytes, SHA-256 5a3c61a8581ed5d0dc27017c4c8a47602ccb0d34d8096e092f47a451ba628606;
+- checkpoint model-online-v1/latest.pt, 5,791,627 bytes, SHA-256 83bd6bc9d1bd3340a79da7fee922411af12603254f2d36315f9fdcc30c3d06d6;
 - same seed corpus hash as above and vocabulary 512.
 
 This is a separate checkpoint from the 31,200-parameter smoke run in this report. The running experimental server returned HTTP 200 for an exact corpus Q&A match and valid SSE termination; an unauthorised request returned 401. For a question outside the 65-entry Q&A retrieval set, the service refused to return its low-quality free-generation output. Thus the HTTP/auth/retrieval path works, while general free-form answer quality remains inadequate. The server is running only inside the temporary Vercel Sandbox and is not wired to the public QQ-AI Preview deployment.
 
 ## Validation performed
 
-- 6 QQ Quantum core tests passed: Unicode/BPE round-trip, token persistence, special-token behavior, Transformer output and causal mask, invalid configuration rejection, CPU training/checkpoint/resume/generation. The resume test also compares exact model tensors against uninterrupted training.
+- 7 QQ Quantum core tests passed: Unicode/BPE round-trip, token persistence, special-token behavior, plain/gzip/base64-gzip corpus loading, Transformer output and causal mask, invalid configuration rejection, CPU training/checkpoint/resume/generation. The resume test also compares exact model tensors against uninterrupted training.
 - 4 existing training-data validator tests passed.
 - Training-data validator self-test passed.
 - Python compileall passed.
