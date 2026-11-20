@@ -877,14 +877,15 @@ test("non-OpenAI compatible gateways keep their existing request format", async 
   assert.equal("max_completion_tokens" in payload, false);
 });
 
-test("chat and vision routes accept the protected OpenAI key alias without exposing it", async () => {
+test("QQ Quantum chat does not accept external LLM keys; separate Vision may use its own key", async () => {
   const chat = await readFile(new URL("../api/chat.ts", import.meta.url), "utf8");
   const vision = await readFile(new URL("../api/vision.ts", import.meta.url), "utf8");
   const capabilities = await readFile(new URL("../api/capabilities.ts", import.meta.url), "utf8");
-  assert.match(chat, /process\.env\.OPENAIAPIKEY/);
-  assert.match(vision, /process\.env\.OPENAIAPIKEY/);
-  assert.match(capabilities, /process\.env\.OPENAIAPIKEY/);
-  assert.doesNotMatch(chat, /VITE_OPENAIAPIKEY|console\.(?:log|info|warn|error).*apiKey/);
+  assert.doesNotMatch(chat, /OPENAIAPIKEY|OPENAI_API_KEY|DEEPSEEK_API_KEY|VITE_OPENAIAPIKEY/);
+  assert.match(chat, /QQ_QUANTUM_ONLINE_URL/);
+  assert.match(vision, /process\\.env\\.OPENAIAPIKEY/);
+  assert.match(capabilities, /process\\.env\\.OPENAIAPIKEY/);
+  assert.doesNotMatch(chat, /console\\.(?:log|info|warn|error).*apiKey/);
 });
 
 
@@ -916,9 +917,11 @@ test("DeepSeek API key alias is server-side and uses the documented Chat Complet
   assert.equal("max_completion_tokens" in payload, false);
 });
 
-test("chat, game, vision and capabilities accept the DeepSeek key only from server environment", async () => {
-  const files = ["../api/chat.ts", "../api/game-assistant.ts", "../api/vision.ts", "../api/capabilities.ts"];
+test("legacy game and separate vision keys remain server-only; QQ Quantum chat rejects DeepSeek", async () => {
+  const chat = await readFile(new URL("../api/chat.ts", import.meta.url), "utf8");
+  const files = ["../api/game-assistant.ts", "../api/vision.ts", "../api/capabilities.ts"];
   const sources = await Promise.all(files.map(path => readFile(new URL(path, import.meta.url), "utf8")));
-  for (const source of sources) assert.match(source, /process\.env\.DEEPSEEK_API_KEY/);
+  assert.doesNotMatch(chat, /process\\.env\\.DEEPSEEK_API_KEY|DEEPSEEK_API_KEY/);
+  for (const source of sources) assert.match(source, /process\\.env\\.DEEPSEEK_API_KEY/);
   assert.doesNotMatch(sources[0], /VITE_DEEPSEEK_API_KEY|console\\.(?:log|info|warn|error).*apiKey/);
 });
