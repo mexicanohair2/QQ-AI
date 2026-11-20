@@ -92,6 +92,17 @@ test("QQCross Game AI uses the same QQ-owned online model gateway", async () => 
 });
 
 
+test("manual QQ Search has a browser-side Wikimedia fallback and explains Supabase email links", async () => {
+  const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
+  assert.match(app, /Browser-side fallback: Wikimedia allows cross-origin requests with origin=\*/);
+  assert.match(app, /url\.searchParams\.set\("origin", "\*"\)/);
+  assert.match(app, /parseMediaWikiResults\(data\.query\?\.search\)/);
+  assert.match(app, /buildSearchOnlyAnswer\(sources\)/);
+  assert.match(app, /Ссылка должна вернуть тебя в QQ AI/);
+  assert.match(app, /Если ссылка открывает QQCross вместо QQ AI/);
+  assert.match(app, /emailRedirectTo: window\.location\.origin/);
+});
+
 test("manual QQ Search works independently of the online generation model", async () => {
   const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
   const start = app.indexOf("async function searchWeb()");
