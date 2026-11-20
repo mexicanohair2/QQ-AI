@@ -371,7 +371,7 @@ test("online mode requires an explicit switch before using the local model", asy
   assert.ok(start >= 0 && end > start, "send handler should exist");
   const handler = app.slice(start, end);
   assert.match(handler, /mode === "online" && onlineModelReady === false/);
-  assert.match(handler, /Онлайн-режим не переключается автоматически/);
+  assert.match(handler, /Офлайн-режим автоматически не включается/);
   const onlineStart = handler.indexOf('else if (mode === "online")');
   const offlineStart = handler.indexOf('} else await sendOffline(next);', onlineStart);
   assert.ok(onlineStart >= 0 && offlineStart > onlineStart);
