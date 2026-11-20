@@ -966,6 +966,6 @@ test("QQ Quantum offline HTML parser rejects malformed or oversized model assets
   assert.throws(
     () => parseQuantumModelHtmlText("<!doctype html><script>const QQ_ASSETS = " +
       JSON.stringify(invalid) + ";</script>"),
-    /официальной автономной сборки/i,
+    /официальной автономной сборк/i,
   );
 });
