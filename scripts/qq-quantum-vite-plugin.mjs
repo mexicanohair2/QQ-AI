@@ -7,7 +7,7 @@ export function qqQuantumIntegration() {
     name: "qq-quantum-dual-mode",
     enforce: "pre",
     transform(source, id) {
-      if (!id.replace(/\\\\/g, "/").endsWith("/src/App.tsx")) return null;
+      if (!id.replace(/\\/g, "/").endsWith("/src/App.tsx")) return null;
       let code = source;
       const replaceExactlyOnce = (from, to, label) => {
         const first = code.indexOf(from);
@@ -19,7 +19,7 @@ export function qqQuantumIntegration() {
 
       replaceExactlyOnce(
         'import { readOpenAIChatStream } from "./lib/openai-stream";',
-        'import { readOpenAIChatStream } from "./lib/openai-stream";\\nimport { importQuantumModelHtml, loadQuantumAssets } from "./lib/qq-quantum-assets";',
+        'import { readOpenAIChatStream } from "./lib/openai-stream";\nimport { importQuantumModelHtml, loadQuantumAssets } from "./lib/qq-quantum-assets";',
         "add Quantum assets import"
       );
       replaceExactlyOnce(
