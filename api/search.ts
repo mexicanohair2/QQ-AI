@@ -3,6 +3,7 @@ import {
   buildSearchOnlyAnswer,
   parseBingResults,
   parseDuckDuckGoResults,
+  parseMediaWikiResults,
   mergeSearchResults,
 } from "../src/lib/qq-ai-core.ts";
 
@@ -88,16 +89,58 @@ export default async function handler(request: Request): Promise<Response> {
       }
     }));
 
-    const sources = mergeSearchResults(providerResults.map(result => result.sources), 8);
-    const providersUsed = providerResults
-      .filter(result => result.sources.length > 0)
-      .map(result => result.name);
+    // Wikimedia provides a separate, keyless fallback when search-engine HTML
+    // is blocked or changes its markup. Its response is bounded before JSON parsing.
+    const wikipediaController = new AbortController();
+    const wikipediaTimeout = setTimeout(() => wikipediaController.abort(), 5_000);
+    let wikipediaSources = [];
+    try {
+      const wikipediaUrl = new URL("https://ru.wikipedia.org/w/api.php");
+      wikipediaUrl.searchParams.set("action", "query");
+      wikipediaUrl.searchParams.set("list", "search");
+      wikipediaUrl.searchParams.set("srsearch", body.query.trim());
+      wikipediaUrl.searchParams.set("srlimit", "8");
+      wikipediaUrl.searchParams.set("srnamespace", "0");
+      wikipediaUrl.searchParams.set("srprop", "snippet");
+      wikipediaUrl.searchParams.set("format", "json");
+      wikipediaUrl.searchParams.set("formatversion", "2");
+      wikipediaUrl.searchParams.set("utf8", "1");
+
+      const wikipediaResponse = await fetch(wikipediaUrl.toString(), {
+        headers: {
+          "Accept": "application/json",
+          "Accept-Language": "ru,en;q=0.8",
+          "User-Agent": "QQAI/1.0 (https://github.com/mexicanohair2/QQ-AI)",
+        },
+        signal: wikipediaController.signal,
+      });
+      if (wikipediaResponse.ok) {
+        const rawWikipedia = await readResponseTextLimited(wikipediaResponse, 500_000);
+        const wikipediaData = JSON.parse(rawWikipedia) as { query?: { search?: unknown } };
+        wikipediaSources = parseMediaWikiResults(wikipediaData.query?.search, retrievedAt);
+      } else {
+        try { await wikipediaResponse.body?.cancel(); } catch { /* upstream may already be closed */ }
+      }
+    } catch {
+      wikipediaSources = [];
+    } finally {
+      clearTimeout(wikipediaTimeout);
+    }
+
+    const sources = mergeSearchResults([
+      ...providerResults.map(result => result.sources),
+      wikipediaSources,
+    ], 8);
+    const providersUsed = [
+      ...providerResults.filter(result => result.sources.length > 0).map(result => result.name),
+      ...(wikipediaSources.length > 0 ? ["Wikipedia (RU)"] : []),
+    ];
 
     if (!sources.length) {
       return json({
-        error: "Поисковые системы не вернули доступную выдачу. Попробуй переформулировать запрос или повторить позже.",
+        error: "Поисковые системы и справочная база не вернули доступных результатов. Попробуй уточнить запрос или повторить позже.",
         code: "SEARCH_PROVIDERS_UNAVAILABLE",
-        providersAttempted: providers.length,
+        providersAttempted: providers.length + 1,
       }, 502);
     }
 
