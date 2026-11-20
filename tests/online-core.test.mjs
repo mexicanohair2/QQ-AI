@@ -164,19 +164,19 @@ test("chat gateway keeps its upstream timeout active for the lifetime of the res
 });
 
 
-test("welcome screen offers an explicit path to the offline model when online inference is unconfigured", async () => {
+test("welcome screen keeps online selected and never switches to offline automatically", async () => {
   const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
-  assert.match(app, /Онлайн-модель пока не подключена/);
-  assert.match(app, /Открыть локальный режим/);
-  assert.match(app, /Онлайн-режим не переключается автоматически/);
-  assert.match(app, /Открыть офлайн-режим/);
+  assert.match(app, /Онлайн-режим выбран, но модель не подключена/);
+  assert.match(app, /Офлайн-режим автоматически не включается/);
+  assert.match(app, /setMode\("offline"\)/);
+  assert.match(app, /Онлайн-модель QQ AI не настроена на сервере/);
 });
 
 
-test("capability-check failure remains unknown instead of falsely claiming no model is configured", async () => {
+test("capability-check failure remains unknown and reports an online connection check failure", async () => {
   const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
-  assert.match(app, /setOnlineModelReady\(null\); setVisionReady\(null\); setCapabilitiesUnavailable\(true\)/);
-  assert.match(app, /Не удалось проверить статус моделей/);
+  assert.match(app, /setOnlineModelReady\(null\);[\s\S]*setVisionReady\(null\);[\s\S]*setCapabilitiesUnavailable\(true\)/);
+  assert.match(app, /Не удалось проверить подключение к онлайн-модели/);
 });
 
 
