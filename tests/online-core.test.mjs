@@ -543,6 +543,47 @@ test("vision route rejects a cross-origin request even when Host is absent", asy
   assert.deepEqual(await response.json(), { error: "Недопустимый источник запроса." });
 });
 
+test("manual search returns Wikimedia sources when both HTML search providers are unavailable", async () => {
+  const { default: searchHandler } = await import("../api/search.ts");
+  const originalFetch = globalThis.fetch;
+  const requestedUrls = [];
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    requestedUrls.push(url);
+    if (url.includes("ru.wikipedia.org/w/api.php")) {
+      return new Response(JSON.stringify({
+        query: {
+          search: [
+            { pageid: 42, title: "NASA", snippet: "Космическое агентство" },
+            { pageid: 43, title: "Космос", snippet: "Исследование космического пространства" },
+          ],
+        },
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response("upstream unavailable", { status: 503 });
+  };
+
+  try {
+    const request = new Request("https://qq-ai.test/api/search", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://qq-ai.test" },
+      body: JSON.stringify({ query: "NASA" }),
+    });
+    const response = await searchHandler(request);
+    const result = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(result.providersUsed.includes("Wikipedia (RU)"), true);
+    assert.equal(result.sources.length, 2);
+    assert.equal(result.sources[0].url, "https://ru.wikipedia.org/?curid=42");
+    assert.equal(result.synthesizedByModel, false);
+    assert.ok(requestedUrls.some(url => url.includes("html.duckduckgo.com")));
+    assert.ok(requestedUrls.some(url => url.includes("www.bing.com/search")));
+    assert.ok(requestedUrls.some(url => url.includes("ru.wikipedia.org/w/api.php")));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("search route rejects a non-web origin even when its host matches", async () => {
   const { default: searchHandler } = await import("../api/search.ts");
   const originalFetch = globalThis.fetch;
