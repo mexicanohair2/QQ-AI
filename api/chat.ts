@@ -142,7 +142,7 @@ export default async function handler(request: Request): Promise<Response> {
       try { await upstream.body?.cancel(); } catch { /* upstream may already be closed */ }
       return json({
         error: "Собственная онлайн-модель QQ Quantum временно недоступна.",
-        code: "QQ_QUANTUM_UPSTREAM_ERROR",
+        code: "MODEL_UPSTREAM_ERROR",
       }, 502);
     }
     if (!upstream.body) return json({ error: "QQ Quantum Online не вернула поток ответа." }, 502);
