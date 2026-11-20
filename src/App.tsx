@@ -50,7 +50,7 @@ function VoiceIcon() {
 export default function App() {
   const [messages, setMessages] = useState<Message[]>(() => readChatMessages(undefined, "anonymous"));
   const [mode, setMode] = useState<Mode>("online");
-  const [status, setStatus] = useState("Локальная модель ещё не загружена");
+  const [status, setStatus] = useState("Проверяем подключение к онлайн-модели…");
   const [progress, setProgress] = useState(0);
   const [busy, setBusy] = useState(false);
   const [notifyOnComplete, setNotifyOnComplete] = useState(() => {
@@ -251,8 +251,16 @@ export default function App() {
       setOnlineModelReady(data.onlineText?.state === "configured");
       setVisionReady(data.imageUnderstanding?.state === "configured");
       setCapabilitiesUnavailable(false);
+      setStatus(data.onlineText?.state === "configured"
+        ? "Онлайн-модель подключена"
+        : "Онлайн-модель не настроена на сервере");
     }).catch(() => {
-      if (alive) { setOnlineModelReady(null); setVisionReady(null); setCapabilitiesUnavailable(true); }
+      if (alive) {
+        setOnlineModelReady(null);
+        setVisionReady(null);
+        setCapabilitiesUnavailable(true);
+        setStatus("Не удалось проверить подключение к онлайн-модели");
+      }
     });
     return () => { alive = false; };
   }, []);
@@ -1331,7 +1339,7 @@ export default function App() {
             const searchAnswer = await sendSearchFallback(content);
             setMessages([...next, { role: "assistant", content: searchAnswer }]);
           } else {
-            throw new Error("Облачная модель QQ AI ещё не подключена. Онлайн-режим не переключается автоматически. Если хочешь использовать локальную модель, вручную выбери «Офлайн».");
+            throw new Error("Онлайн-модель QQ AI не настроена на сервере. Проверь адрес API, название модели и наличие серверного ключа DeepSeek для Preview. Офлайн-режим автоматически не включается.");
           }
         } else if (mode === "online") {
           try {
@@ -1489,8 +1497,7 @@ export default function App() {
           <h1>О чём <em>подумаем</em> сегодня?</h1>
           <p className="welcome-copy">Задавай вопросы, исследуй идеи и создавай новое. После загрузки локальная модель сможет отвечать прямо в браузере, а для актуальных тем искать источники в интернете.</p>
           {mode === "online" && onlineModelReady === false && <div className="offline-card">
-            <div><b>Онлайн-модель пока не подключена</b><small>Сейчас доступны интернет-поиск и локальная модель после загрузки. Можно перейти в офлайн-режим.</small></div>
-            <button className="primary" onClick={() => { setMode("offline"); setStatus(offlineReady ? "Офлайн-модель готова" : "Сначала подготовь офлайн-модель"); }}>Открыть локальный режим</button>
+            <div><b>Онлайн-режим выбран, но модель не подключена</b><small>Для ответов QQ AI нужен серверный ключ DeepSeek и настройки API. Интернет-поиск доступен отдельно. Офлайн-режим не включается автоматически.</small></div>
           </div>}
           <div className="suggestions">
             <button onClick={() => setDraft("Помоги мне разобраться в новой теме и составь понятный план изучения.")}><span>✦</span><b>Разобраться в теме</b><small>Объяснение простыми словами</small></button>
