@@ -59,6 +59,46 @@ export default async function handler(request: Request): Promise<Response> {
     ];
 
     const retrievedAt = new Date().toISOString();
+
+    // Run all free providers in parallel. Wikimedia is an independent fallback
+    // when HTML search engines block server-side requests or change their markup.
+    const wikipediaPromise = (async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5_000);
+      try {
+        const url = new URL("https://ru.wikipedia.org/w/api.php");
+        url.searchParams.set("action", "query");
+        url.searchParams.set("list", "search");
+        url.searchParams.set("srsearch", body.query.trim());
+        url.searchParams.set("srlimit", "8");
+        url.searchParams.set("srnamespace", "0");
+        url.searchParams.set("srprop", "snippet");
+        url.searchParams.set("format", "json");
+        url.searchParams.set("formatversion", "2");
+        url.searchParams.set("utf8", "1");
+
+        const response = await fetch(url.toString(), {
+          headers: {
+            "Accept": "application/json",
+            "Accept-Language": "ru,en;q=0.8",
+            "User-Agent": "QQAI/1.0 (https://github.com/mexicanohair2/QQ-AI)",
+          },
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          try { await response.body?.cancel(); } catch { /* upstream may already be closed */ }
+          return [];
+        }
+        const raw = await readResponseTextLimited(response, 500_000);
+        const data = JSON.parse(raw) as { query?: { search?: unknown } };
+        return parseMediaWikiResults(data.query?.search, retrievedAt);
+      } catch {
+        return [];
+      } finally {
+        clearTimeout(timeout);
+      }
+    })();
+
     const providerResults = await Promise.all(providers.map(async provider => {
       const providerController = new AbortController();
       const providerTimeout = setTimeout(() => providerController.abort(), 5_000);
@@ -89,44 +129,7 @@ export default async function handler(request: Request): Promise<Response> {
       }
     }));
 
-    // Wikimedia provides a separate, keyless fallback when search-engine HTML
-    // is blocked or changes its markup. Its response is bounded before JSON parsing.
-    const wikipediaController = new AbortController();
-    const wikipediaTimeout = setTimeout(() => wikipediaController.abort(), 5_000);
-    let wikipediaSources = [];
-    try {
-      const wikipediaUrl = new URL("https://ru.wikipedia.org/w/api.php");
-      wikipediaUrl.searchParams.set("action", "query");
-      wikipediaUrl.searchParams.set("list", "search");
-      wikipediaUrl.searchParams.set("srsearch", body.query.trim());
-      wikipediaUrl.searchParams.set("srlimit", "8");
-      wikipediaUrl.searchParams.set("srnamespace", "0");
-      wikipediaUrl.searchParams.set("srprop", "snippet");
-      wikipediaUrl.searchParams.set("format", "json");
-      wikipediaUrl.searchParams.set("formatversion", "2");
-      wikipediaUrl.searchParams.set("utf8", "1");
-
-      const wikipediaResponse = await fetch(wikipediaUrl.toString(), {
-        headers: {
-          "Accept": "application/json",
-          "Accept-Language": "ru,en;q=0.8",
-          "User-Agent": "QQAI/1.0 (https://github.com/mexicanohair2/QQ-AI)",
-        },
-        signal: wikipediaController.signal,
-      });
-      if (wikipediaResponse.ok) {
-        const rawWikipedia = await readResponseTextLimited(wikipediaResponse, 500_000);
-        const wikipediaData = JSON.parse(rawWikipedia) as { query?: { search?: unknown } };
-        wikipediaSources = parseMediaWikiResults(wikipediaData.query?.search, retrievedAt);
-      } else {
-        try { await wikipediaResponse.body?.cancel(); } catch { /* upstream may already be closed */ }
-      }
-    } catch {
-      wikipediaSources = [];
-    } finally {
-      clearTimeout(wikipediaTimeout);
-    }
-
+    const wikipediaSources = await wikipediaPromise;
     const sources = mergeSearchResults([
       ...providerResults.map(result => result.sources),
       wikipediaSources,
