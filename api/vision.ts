@@ -49,6 +49,7 @@ export default async function handler(request: Request): Promise<Response> {
   const apiKey = resolveModelApiKey(
     process.env.QQ_AI_VISION_API_KEY,
     process.env.QQ_AI_API_KEY,
+    process.env.DEEPSEEK_API_KEY,
     process.env.OPENAIAPIKEY,
   );
 
