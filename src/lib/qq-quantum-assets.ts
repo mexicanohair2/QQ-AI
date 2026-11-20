@@ -99,18 +99,18 @@ function validateAssets(value: unknown): asserts value is QuantumBrowserAssets {
   }
 }
 
-export async function importQuantumModelHtml(file: File): Promise<QuantumBrowserAssets> {
-  if (!(file instanceof File) || file.size <= 0 || file.size > MAX_HTML_BYTES) {
-    throw new Error("Выбери HTML-файл QQ Quantum размером не более 8 МБ.");
+export function parseQuantumModelHtmlText(html: string): QuantumBrowserAssets {
+  if (typeof html !== "string" || new TextEncoder().encode(html).byteLength <= 0 ||
+      new TextEncoder().encode(html).byteLength > MAX_HTML_BYTES) {
+    throw new Error("HTML-файл QQ Quantum пустой или превышает 8 МБ.");
   }
-  const html = await file.text();
   if (!/<!doctype html/i.test(html.slice(0, 256))) {
     throw new Error("Файл не похож на автономную HTML-сборку QQ Quantum.");
   }
-  const marker = /const\s+QQ_ASSETS\s*=\s*/i.exec(html);
+  const marker = /const\\s+QQ_ASSETS\\s*=\\s*/i.exec(html);
   if (!marker) throw new Error("Не удалось найти встроенные данные QQ Quantum в HTML-файле.");
   let start = marker.index + marker[0].length;
-  while (/\s/.test(html[start] ?? "")) start += 1;
+  while (/\\s/.test(html[start] ?? "")) start += 1;
   if (html[start] !== "{") throw new Error("Встроенные данные QQ Quantum имеют неправильный формат.");
 
   // Extract the complete JSON object without evaluating any HTML/JavaScript.
@@ -123,7 +123,7 @@ export async function importQuantumModelHtml(file: File): Promise<QuantumBrowser
     const char = html[index];
     if (inString) {
       if (escaped) escaped = false;
-      else if (char === "\\\\") escaped = true;
+      else if (char === "\\\\\\\\") escaped = true;
       else if (char === '"') inString = false;
       continue;
     }
@@ -142,6 +142,14 @@ export async function importQuantumModelHtml(file: File): Promise<QuantumBrowser
   try { parsed = JSON.parse(html.slice(start, end)); }
   catch { throw new Error("Встроенные данные модели повреждены. Скачай HTML-сборку повторно."); }
   validateAssets(parsed);
-  await saveQuantumAssets(parsed);
   return parsed;
+}
+
+export async function importQuantumModelHtml(file: File): Promise<QuantumBrowserAssets> {
+  if (!(file instanceof File) || file.size <= 0 || file.size > MAX_HTML_BYTES) {
+    throw new Error("Выбери HTML-файл QQ Quantum размером не более 8 МБ.");
+  }
+  const assets = parseQuantumModelHtmlText(await file.text());
+  await saveQuantumAssets(assets);
+  return assets;
 }
