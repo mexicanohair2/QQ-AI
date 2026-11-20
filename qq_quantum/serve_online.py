@@ -70,7 +70,7 @@ def answer_query(messages):
     known = find_answer(last, QA)
     if known:
         return known
-    prompt = "Ты QQ Quantum. Ответь на русском кратко и точно.\\nПользователь: " + last[:500] + "\\nQQ Quantum:"
+    prompt = "Ты QQ Quantum. Ответь на русском кратко и точно.\nПользователь: " + last[:500] + "\nQQ Quantum:"
     ids = torch.tensor([TOKENIZER.encode(prompt, add_bos=True)], dtype=torch.long)
     with torch.inference_mode():
         output = MODEL.generate(ids, max_new_tokens=48, temperature=0.65, top_k=24, eos_token_id=2)
@@ -89,8 +89,8 @@ def sse(content: str) -> bytes:
         "model": "qq-quantum-online-v1",
         "choices": [{"index": 0, "delta": {"content": content}, "finish_reason": None}],
     }
-    return ("data: " + json.dumps(payload, ensure_ascii=False) + "\\n\\n" +
-            "data: [DONE]\\n\\n").encode("utf-8")
+    return ("data: " + json.dumps(payload, ensure_ascii=False) + "\n\n" +
+            "data: [DONE]\n\n").encode("utf-8")
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "QQQuantum/0.1"
