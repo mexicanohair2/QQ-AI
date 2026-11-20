@@ -9,7 +9,7 @@ test("online route accepts only the independent QQ Quantum model service", async
   assert.match(source, /QQ_QUANTUM_ONLINE_UNAVAILABLE/);
   assert.match(source, /safeModelEndpoint/);
   assert.doesNotMatch(source, /QQ_AI_API_URL|QQ_AI_MODEL|DEEPSEEK_API_KEY|OPENAIAPIKEY/);
-  assert.match(source, /readRequestTextLimited\\(request, 520_000\\)/);
+  assert.ok(source.includes("readRequestTextLimited(request, 520_000)"));
 });
 
 test("web search is a separate real endpoint and is treated as untrusted evidence", async () => {
