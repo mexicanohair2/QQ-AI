@@ -10,7 +10,11 @@ type WorkerMessage =
   | { type: "load"; assets: QuantumBrowserAssets }
   | { type: "chat"; requestId: string; messages: Array<{ role: string; content: string }> };
 type QAItem = { question: string; answer: string; terms: Set<string> };
-declare const self: DedicatedWorkerGlobalScope & { QQQuantumBrowser: BrowserApi };
+declare const self: {
+  QQQuantumBrowser: BrowserApi;
+  addEventListener(type: "message", listener: (event: MessageEvent<WorkerMessage>) => void): void;
+  postMessage(message: unknown): void;
+};
 
 const STOP = new Set("а без бы в во вот все вы где да для до его ее если есть же за и из или им их к как ко когда кто ли мне мы на над не него нее ни но о об от по под при про раз с со так то тоже у уже что чтобы это этот я такое такой такая почему зачем расскажи объясни можно нужно чем является делает значит ты".split(/\s+/));
 const WORDS = /[а-яёa-z0-9]+/gi;
@@ -112,6 +116,8 @@ self.addEventListener("message", async (event: MessageEvent<WorkerMessage>) => {
       if (!isReady) throw new Error("Сначала загрузи собственную модель QQ Quantum.");
       const lastUser = [...message.messages].reverse().find(item => item.role === "user")?.content ?? "";
       if (!lastUser.trim()) throw new Error("Пустое сообщение.");
+      (self as unknown as { __recentMessages?: Array<{ role: string; content: string }> }).__recentMessages =
+        message.messages.slice(-4).map(item => ({ role: item.role, content: String(item.content).slice(0, 300) }));
       const result = generateAnswer(lastUser);
       self.postMessage({ type: "answer", requestId: message.requestId, ...result });
     }
