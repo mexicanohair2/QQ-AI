@@ -11,7 +11,7 @@ const datasetPath = new URL("../evals/qq-ai-benchmark.ru.json", import.meta.url)
 const dataset = JSON.parse(await readFile(datasetPath, "utf8"));
 const endpoint = process.env.QQ_AI_API_URL?.trim();
 const model = process.env.QQ_AI_MODEL?.trim();
-const token = resolveModelApiKey(process.env.QQ_AI_API_KEY, process.env.OPENAIAPIKEY);
+const token = resolveModelApiKey(process.env.QQ_AI_API_KEY, process.env.DEEPSEEK_API_KEY, process.env.OPENAIAPIKEY);
 
 if (!endpoint || !model) {
   console.error("Set QQ_AI_API_URL and QQ_AI_MODEL in the environment. No key is required for a public endpoint; private endpoints may use QQ_AI_API_KEY.");
@@ -23,7 +23,7 @@ if (!safeEndpoint) {
   process.exit(2);
 }
 if (modelEndpointRequiresApiKey(safeEndpoint) && !token) {
-  console.error("The OpenAI API endpoint requires QQ_AI_API_KEY or OPENAIAPIKEY on the server.");
+  console.error("This provider endpoint requires a server-side API key (QQ_AI_API_KEY, DEEPSEEK_API_KEY, or OPENAIAPIKEY).");
   process.exit(2);
 }
 const parsed = new URL(safeEndpoint);
