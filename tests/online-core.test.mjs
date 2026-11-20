@@ -419,6 +419,7 @@ test("search route calls both providers in parallel and returns deduplicated res
     calls.push(url.hostname);
     if (url.hostname === "html.duckduckgo.com") return new Response(duckDuckGoHtml, { status: 200 });
     if (url.hostname === "www.bing.com") return new Response(bingHtml, { status: 200 });
+    if (url.hostname === "ru.wikipedia.org") return new Response(JSON.stringify({ query: { search: [] } }), { status: 200 });
     throw new Error("Unexpected provider host: " + url.hostname);
   };
 
@@ -431,7 +432,7 @@ test("search route calls both providers in parallel and returns deduplicated res
     const response = await searchHandler(request);
     const body = await response.json();
     assert.equal(response.status, 200);
-    assert.deepEqual(calls.sort(), ["html.duckduckgo.com", "www.bing.com"]);
+    assert.deepEqual(calls.sort(), ["html.duckduckgo.com", "ru.wikipedia.org", "www.bing.com"]);
     assert.deepEqual(body.providersUsed, ["DuckDuckGo", "Bing"]);
     assert.deepEqual(body.sources.map(item => item.title), ["DuckDuckGo result", "Bing result"]);
     assert.equal(body.sources[0].domain, "one.example");
