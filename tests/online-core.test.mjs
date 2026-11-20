@@ -760,7 +760,7 @@ test("online mode never silently falls back to the offline Qwen model", async ()
   assert.ok(onlineStart >= 0 && offlineStart > onlineStart, "online and offline routes should be distinct");
   const onlineBranch = handler.slice(onlineStart, offlineStart);
   assert.doesNotMatch(onlineBranch, /sendOffline|setMode\("offline"\)/);
-  assert.match(handler, /Онлайн-режим не переключается автоматически/);
+  assert.match(handler, /Офлайн-режим автоматически не включается/);
   assert.match(app, /mode === "online" && <button className="secondary-button"/);
 });
 
