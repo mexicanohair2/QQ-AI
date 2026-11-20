@@ -1,43 +1,55 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { performance } from "node:perf_hooks";
+import {
+  buildChatCompletionPayload,
+  modelEndpointRequiresApiKey,
+  resolveModelApiKey,
+  safeModelEndpoint,
+} from "../src/lib/model-gateway.ts";
 
 const datasetPath = new URL("../evals/qq-ai-benchmark.ru.json", import.meta.url);
 const dataset = JSON.parse(await readFile(datasetPath, "utf8"));
 const endpoint = process.env.QQ_AI_API_URL?.trim();
 const model = process.env.QQ_AI_MODEL?.trim();
-const token = process.env.QQ_AI_API_KEY?.trim();
+const token = resolveModelApiKey(process.env.QQ_AI_API_KEY, process.env.OPENAIAPIKEY);
 
 if (!endpoint || !model) {
   console.error("Set QQ_AI_API_URL and QQ_AI_MODEL in the environment. No key is required for a public endpoint; private endpoints may use QQ_AI_API_KEY.");
   process.exit(2);
 }
-const parsed = new URL(endpoint);
-if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
-  console.error("QQ_AI_API_URL must be an HTTPS URL without embedded credentials.");
+const safeEndpoint = safeModelEndpoint(endpoint);
+if (!safeEndpoint) {
+  console.error("QQ_AI_API_URL must be a public HTTPS URL without embedded credentials.");
   process.exit(2);
 }
+if (modelEndpointRequiresApiKey(safeEndpoint) && !token) {
+  console.error("The OpenAI API endpoint requires QQ_AI_API_KEY or OPENAIAPIKEY on the server.");
+  process.exit(2);
+}
+const parsed = new URL(safeEndpoint);
 
 const selected = dataset.cases.filter(item => !item.requiresMedia);
 const results = [];
 for (const item of selected) {
   const started = performance.now();
   try {
-    const response = await fetch(endpoint, {
+    const response = await fetch(safeEndpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         ...(token ? { Authorization: "Bearer " + token } : {}),
       },
-      body: JSON.stringify({
+      body: JSON.stringify(buildChatCompletionPayload({
+        endpoint: safeEndpoint,
         model,
         temperature: 0.2,
-        max_tokens: 1200,
+        maxOutputTokens: 1200,
         stream: false,
         messages: [
           { role: "system", content: "Ты QQ AI. Отвечай по-русски. Будь точным, не выдумывай факты и показывай необходимые шаги." },
           { role: "user", content: item.prompt },
         ],
-      }),
+      })),
       signal: AbortSignal.timeout(60000),
     });
     const raw = await response.text();
