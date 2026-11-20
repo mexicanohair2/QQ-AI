@@ -113,7 +113,7 @@ export default async function handler(request: Request): Promise<Response> {
   const endpoint = process.env.QQ_AI_API_URL?.trim();
   const model = process.env.QQ_AI_MODEL?.trim();
   const safeEndpoint = safeModelEndpoint(endpoint);
-  const apiKey = resolveModelApiKey(process.env.QQ_AI_API_KEY, process.env.OPENAIAPIKEY);
+  const apiKey = resolveModelApiKey(process.env.QQ_AI_API_KEY, process.env.DEEPSEEK_API_KEY, process.env.OPENAIAPIKEY);
 
   if (!safeEndpoint || !model || (modelEndpointRequiresApiKey(safeEndpoint) && !apiKey)) {
     return json({
