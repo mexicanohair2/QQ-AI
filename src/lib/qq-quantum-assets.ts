@@ -107,10 +107,39 @@ export async function importQuantumModelHtml(file: File): Promise<QuantumBrowser
   if (!/<!doctype html/i.test(html.slice(0, 256))) {
     throw new Error("Файл не похож на автономную HTML-сборку QQ Quantum.");
   }
-  const match = html.match(/const\s+QQ_ASSETS\s*=\s*(\{[\s\S]*?\})\s*;\s*<\/script>/i);
-  if (!match) throw new Error("Не удалось прочитать встроенные веса QQ Quantum из HTML-файла.");
+  const marker = /const\s+QQ_ASSETS\s*=\s*/i.exec(html);
+  if (!marker) throw new Error("Не удалось найти встроенные данные QQ Quantum в HTML-файле.");
+  let start = marker.index + marker[0].length;
+  while (/\s/.test(html[start] ?? "")) start += 1;
+  if (html[start] !== "{") throw new Error("Встроенные данные QQ Quantum имеют неправильный формат.");
+
+  // Extract the complete JSON object without evaluating any HTML/JavaScript.
+  // This parser respects quoted braces and escaped quotation marks.
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+  let end = -1;
+  for (let index = start; index < html.length; index += 1) {
+    const char = html[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\\\") escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') { inString = true; continue; }
+    if (char === "{" || char === "[") stack.push(char);
+    else if (char === "}" || char === "]") {
+      const open = stack.pop();
+      if ((char === "}" && open !== "{") || (char === "]" && open !== "[")) {
+        throw new Error("Встроенные данные QQ Quantum имеют повреждённую структуру.");
+      }
+      if (stack.length === 0) { end = index + 1; break; }
+    }
+  }
+  if (end < 0) throw new Error("Встроенные данные QQ Quantum обрезаны.");
   let parsed: unknown;
-  try { parsed = JSON.parse(match[1]); }
+  try { parsed = JSON.parse(html.slice(start, end)); }
   catch { throw new Error("Встроенные данные модели повреждены. Скачай HTML-сборку повторно."); }
   validateAssets(parsed);
   await saveQuantumAssets(parsed);
