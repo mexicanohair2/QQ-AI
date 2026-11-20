@@ -49,7 +49,7 @@ function VoiceIcon() {
 
 export default function App() {
   const [messages, setMessages] = useState<Message[]>(() => readChatMessages(undefined, "anonymous"));
-  const [mode, setMode] = useState<Mode>("offline");
+  const [mode, setMode] = useState<Mode>("online");
   const [status, setStatus] = useState("Локальная модель ещё не загружена");
   const [progress, setProgress] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -103,10 +103,7 @@ export default function App() {
   const [memoryDraft, setMemoryDraft] = useState("");
   const [memories, setMemories] = useState<string[]>(() => readStoredMemories(undefined, session?.user?.id ?? "anonymous"));
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [sidebarVisible, setSidebarVisible] = useState(() => {
-    try { return localStorage.getItem("qq-ai-sidebar-hidden") !== "1"; }
-    catch { return true; }
-  });
+  const [sidebarVisible, setSidebarVisible] = useState(false);
   const [threads, setThreads] = useState<Array<{id:string;title:string;updated_at:string}>>([]);
   const [cloudStatus, setCloudStatus] = useState("Только на этом устройстве");
   const [cloudLoaded, setCloudLoaded] = useState(false);
