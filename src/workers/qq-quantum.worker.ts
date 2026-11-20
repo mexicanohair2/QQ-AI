@@ -75,11 +75,17 @@ function grounded(text: string): boolean {
   return count / words.length >= 0.55 && new Set(words).size / words.length >= 0.5;
 }
 
-function generateAnswer(message: string): { answer: string; source: string } {
+function generateAnswer(message: string, history: Array<{ role: string; content: string }> = []): { answer: string; source: string } {
   const local = searchLocal(message);
   if (local) return { answer: local, source: "Локальная база QQ Quantum" };
   if (!tokenizer || !model) throw new Error("Модель QQ Quantum ещё не загружена.");
-  const prompt = "Ты QQ Quantum — экспериментальная языковая модель. Отвечай по-русски кратко и честно. Если не знаешь, так и скажи.\nПользователь: " + message.slice(0, 1500) + "\nQQ Quantum:";
+  const context = history.slice(-4).map(item => {
+    const role = item.role === "assistant" ? "QQ Quantum" : "Пользователь";
+    return role + ": " + String(item.content).slice(0, 220);
+  }).join("\\n");
+  const prompt = "Ты QQ Quantum — экспериментальная языковая модель. Отвечай по-русски кратко и честно. Если не знаешь, так и скажи.\\n" +
+    context + (context ? "\\n" : "") +
+    "Пользователь: " + message.slice(0, 700) + "\\nQQ Quantum:";
   const ids = tokenizer.encode(prompt, true, false);
   const generated = model.generate(ids, 40, 0.7, 24, 2);
   const text = tokenizer.decode(generated, true).trim();
@@ -116,9 +122,11 @@ self.addEventListener("message", async (event: MessageEvent<WorkerMessage>) => {
       if (!isReady) throw new Error("Сначала загрузи собственную модель QQ Quantum.");
       const lastUser = [...message.messages].reverse().find(item => item.role === "user")?.content ?? "";
       if (!lastUser.trim()) throw new Error("Пустое сообщение.");
-      (self as unknown as { __recentMessages?: Array<{ role: string; content: string }> }).__recentMessages =
-        message.messages.slice(-4).map(item => ({ role: item.role, content: String(item.content).slice(0, 300) }));
-      const result = generateAnswer(lastUser);
+      const history = message.messages.slice(-5).map(item => ({
+        role: item.role,
+        content: String(item.content).slice(0, 300),
+      }));
+      const result = generateAnswer(lastUser, history);
       self.postMessage({ type: "answer", requestId: message.requestId, ...result });
     }
   } catch (error) {
