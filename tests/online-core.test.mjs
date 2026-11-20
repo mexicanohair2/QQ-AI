@@ -831,3 +831,39 @@ test("chat and vision routes accept the protected OpenAI key alias without expos
   assert.match(capabilities, /process\.env\.OPENAIAPIKEY/);
   assert.doesNotMatch(chat, /VITE_OPENAIAPIKEY|console\.(?:log|info|warn|error).*apiKey/);
 });
+
+
+test("DeepSeek API key alias is server-side and uses the documented Chat Completions format", async () => {
+  const {
+    buildChatCompletionPayload,
+    isDeepSeekEndpoint,
+    modelEndpointRequiresApiKey,
+    resolveModelApiKey,
+    safeModelEndpoint,
+  } = await import("../src/lib/model-gateway.ts");
+  const endpoint = "https://api.deepseek.com/chat/completions";
+  assert.equal(safeModelEndpoint(endpoint), endpoint);
+  assert.equal(isDeepSeekEndpoint(endpoint), true);
+  assert.equal(modelEndpointRequiresApiKey(endpoint), true);
+  assert.equal(resolveModelApiKey(undefined, "  deepseek-secret-placeholder  "), "deepseek-secret-placeholder");
+  const payload = buildChatCompletionPayload({
+    endpoint,
+    model: "deepseek-flash",
+    messages: [{ role: "user", content: "Привет" }],
+    stream: true,
+    maxOutputTokens: 2400,
+    temperature: 0.7,
+  });
+  assert.equal(payload.model, "deepseek-flash");
+  assert.equal(payload.max_tokens, 2400);
+  assert.equal(payload.reasoning_effort, "low");
+  assert.equal(payload.stream, true);
+  assert.equal("max_completion_tokens" in payload, false);
+});
+
+test("chat, game, vision and capabilities accept the DeepSeek key only from server environment", async () => {
+  const files = ["../api/chat.ts", "../api/game-assistant.ts", "../api/vision.ts", "../api/capabilities.ts"];
+  const sources = await Promise.all(files.map(path => readFile(new URL(path, import.meta.url), "utf8")));
+  for (const source of sources) assert.match(source, /process\\.env\\.DEEPSEEK_API_KEY/);
+  assert.doesNotMatch(sources[0], /VITE_DEEPSEEK_API_KEY|console\\.(?:log|info|warn|error).*apiKey/);
+});
