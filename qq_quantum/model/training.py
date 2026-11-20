@@ -1,6 +1,6 @@
 """Reproducible CPU/GPU training with validation and exact checkpoint resume."""
 from __future__ import annotations
-import hashlib, random
+import base64, binascii, gzip, hashlib, random
 from pathlib import Path
 import numpy as np
 import torch
@@ -9,6 +9,20 @@ from .tokenizer import ByteBPETokenizer
 from .transformer import GPTConfig, QuantumGPT
 CHECKPOINT_FORMAT="qq-quantum-checkpoint-v2"
 SPLIT_POLICY="contiguous-90-10-v1"
+
+def _read_corpus(path: str | Path) -> str:
+    # Supports plain UTF-8, gzip, and base64-encoded gzip files.
+    source = Path(path)
+    raw = source.read_bytes()
+    try:
+        if source.name.endswith(".gz.b64"):
+            raw = gzip.decompress(base64.b64decode(raw.strip(), validate=True))
+        elif source.suffix == ".gz":
+            raw = gzip.decompress(raw)
+        return raw.decode("utf-8")
+    except (binascii.Error, gzip.BadGzipFile, EOFError, UnicodeDecodeError) as exc:
+        raise ValueError(f"Invalid UTF-8 training corpus: {source}") from exc
+
 
 def _atomic_torch_save(payload:dict,path:Path):
     path.parent.mkdir(parents=True,exist_ok=True)
@@ -47,16 +61,22 @@ def train(*,corpus_path:str,output_dir:str,max_steps:int=300,batch_size:int=16,b
     if resolved=="cuda" and not torch.cuda.is_available(): raise RuntimeError("CUDA unavailable")
     if resolved=="mps" and not (hasattr(torch.backends,"mps") and torch.backends.mps.is_available()): raise RuntimeError("MPS unavailable")
     output=Path(output_dir);output.mkdir(parents=True,exist_ok=True)
-    corpus=Path(corpus_path).read_text(encoding="utf-8")
+    corpus=_read_corpus(corpus_path)
     corpus_sha=hashlib.sha256(corpus.encode()).hexdigest()
     if len(corpus)<block_size*2+4: raise ValueError("Corpus too short")
     tok_path,ckpt_path=output/"tokenizer.json",output/"latest.pt"
     requested={"seed":seed,"batch_size":batch_size,"block_size":block_size,"learning_rate":learning_rate,
        "vocab_size":vocab_size,"n_layer":n_layer,"n_head":n_head,"n_embd":n_embd,"dropout":dropout,
        "validation_fraction":validation_fraction,"split_policy":SPLIT_POLICY}
-    if resume and ckpt_path.exists():
+    if resume:
+        if not ckpt_path.is_file() or not tok_path.is_file():
+            raise FileNotFoundError(
+                f"Cannot resume: checkpoint and tokenizer must exist in {output}"
+            )
         tokenizer=ByteBPETokenizer.load(tok_path)
         ckpt=torch.load(ckpt_path,map_location="cpu",weights_only=False)
+        if ckpt.get("format") != CHECKPOINT_FORMAT:
+            raise ValueError("Unsupported checkpoint format")
         saved=ckpt.get("training",{})
         if saved.get("split_policy")!=SPLIT_POLICY or saved.get("corpus_sha256")!=corpus_sha:
             raise ValueError("Checkpoint format or corpus mismatch")

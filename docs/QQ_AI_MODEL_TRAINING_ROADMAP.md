@@ -1,77 +1,98 @@
-# QQ AI — model ownership and training roadmap
+# QQ Quantum — roadmap собственной языковой модели
 
-## Target
+## Основное правило
 
-QQ AI Online must be a project-owned model release, not a user-facing wrapper that silently forwards every request to a consumer chatbot. The target is a QQ-adapted model with its own versioned weights/checkpoints, training recipe, evaluation history, and a self-hosted inference service.
+QQ Quantum создаётся как самостоятельная языковая модель, обучаемая с нуля. Токенизатор, архитектура и обучаемые веса принадлежат проекту. Начальное состояние весов — случайная инициализация. Запрещена подмена генерации DeepSeek, ChatGPT, Gemini, Qwen или другой готовой LLM, включая незаметный fallback через API.
 
-QQ AI Offline remains the separate local Qwen model. Online and offline model IDs, status, and routing must never be conflated.
+Внешние источники разрешены как отдельные инструменты поиска и получения данных. Они не должны генерировать финальный ответ или выполнять рассуждение вместо QQ Quantum.
 
-## What “our own model” means in the first practical release
+## Архитектура проекта
 
-A foundation model trained from random initialization is not a realistic first milestone without a large curated corpus and a substantial GPU cluster. The first QQ-owned model should therefore be built by:
+- **Tokenizer:** собственный byte-level BPE с UTF-8 и специальными токенами диалога.
+- **Language model:** собственный decoder-only causal Transformer.
+- **Training:** AdamW, train/validation split, контроль loss, контроль случайного состояния и возобновление из checkpoint.
+- **Inference:** загрузка только собственных QQ Quantum-весов. Отдельные runtime-адаптеры для устройства и сервера допустимы, но математическая модель и веса должны совпадать по формату и версии.
+- **Tools:** web search, получение документов, голосовая транскрипция и Vision — отдельные компоненты. Они не являются генеративной языковой моделью.
 
-1. Selecting a permissively licensed open-weight base only after license, Russian quality, context length, reasoning, vision, and deployment review.
-2. Recording the exact upstream revision and license obligations.
-3. Creating QQ-authored instruction examples and licensed/consented training data. Never use private chat history, uploaded files, or personal knowledge collections as training data by default.
-4. Supervised fine-tuning the base into a QQ checkpoint; preserve dataset manifests, training configuration, random seed, adapter/checkpoint hashes, and evaluation outputs.
-5. Applying preference optimization only after a reliable preference dataset and independent review process exist.
-6. Exporting a quantized inference artifact and serving it from QQ-controlled infrastructure.
-7. Running the Russian benchmark against the unchanged Qwen offline baseline and at least one suitable open-weight candidate.
+Никакие веса предварительно обученной модели не являются допустимой основой QQ Quantum. Эксперименты с адаптацией готовой LLM не заменяют и не подменяют основную цель.
 
-The base model is a disclosed technical ancestor; the QQ fine-tuned checkpoint, instruction behavior, evaluation suite, orchestration, and release process are the project's own maintained assets. Do not claim that a model was trained from scratch if it was adapted from existing weights.
+## Два режима
 
-## Capability tracks
+### QQ Quantum Offline
+- После первоначальной загрузки собственного пакета модели работает без интернета.
+- Генерация, токенизация и базовые рассуждения выполняются локальным runtime на устройстве.
+- Поиск в интернете, серверные модели и внешние API в этом режиме отключены.
+- Пользователь видит реальный статус: не загружена, загружается, готова или ошибка.
+- Функция считается реализованной только после проверки на реальном Android-устройстве и отключённой сети.
 
-### Online text and reasoning
-- Prioritize Russian instruction following, multi-step reasoning, long-context reading, mathematical explanation, and factual calibration.
-- Keep arithmetic and exact calculations deterministic where possible.
-- Add retrieval and web research as tools; tool availability is not a substitute for reasoning quality.
-- Benchmark latency, first-token time, completion time, memory, and cost per request.
+### QQ Quantum Online
+- Обрабатывает запросы на сервере под контролем проекта.
+- Генерирует ответы только собственной QQ Quantum моделью и собственными весами.
+- Может получать результаты внешнего поиска как явно отделённые источники.
+- Не имеет fallback на сторонние LLM.
+- Должны измеряться задержка, стабильность, расход памяти/CPU и качество ответов.
 
-### Vision
-- Select a vision-language base with a verified image API and compatible license.
-- Evaluate OCR, handwriting, tables, equations, charts, screenshots, and ordinary photos.
-- If vision is a separate model, route images to it explicitly and let the text model synthesize only returned evidence.
-- Never report image support merely because an endpoint accepts a data URL.
+Сейчас api/chat.ts уже изолирован от сторонних генеративных API: он использует только QQ_QUANTUM_ONLINE_URL и QQ_QUANTUM_ONLINE_TOKEN. Эти переменные ещё не настроены, поэтому Online generation остаётся недоступной. Поиск работает отдельно.
 
-### Video and audio
-- Video v1 analyzes a bounded set of timestamped frames. It must not claim to understand every frame.
-- Audio transcription is a separate model and consent flow. It is not implemented by frame sampling.
-- A future multimodal model may unify these paths only after independent acceptance tests.
+В репозитории уже есть экспериментальный qq_quantum/serve_online.py. Он загружает собственный checkpoint из qq_quantum/artifacts/model-online-v1, предоставляет /health и /v1/chat/completions и требует Bearer token QQ_QUANTUM_TOKEN. Для чистого clone он читает исходный сжатый seed_corpus.txt.gz.b64 напрямую. В текущем Sandbox endpoint проверен локально, однако sandbox URL не является постоянным публичным inference-хостом. В Vercel project нет QQ_QUANTUM_ONLINE_URL и QQ_QUANTUM_ONLINE_TOKEN, поэтому сайт к нему не подключён.
 
-## Compute and deployment gate
+## Обучающие данные
 
-The repository and Vercel preview do not supply persistent GPU inference. Model weights cannot be made into a strong online assistant merely by adding TypeScript routes. Before training or hosting:
-- Identify an age-compliant, region-supported compute path.
-- Confirm that a no-card/free allowance is actually sufficient for the intended test, not just a temporary trial.
-- Measure GPU RAM, model size, throughput, cold starts, concurrency, storage, and egress.
-- Obtain explicit adult project-owner approval before any paid plan, payment method, or usage that can incur charges.
-- Keep the inference host private or protected; never expose model credentials to the browser.
+Текущий seed corpus — инженерный стартовый материал, а не полноценный корпус языка:
+- 25 626 символов UTF-8;
+- 300 строк;
+- 11 223 токена после текущего BPE;
+- SHA-256: 7ebdfde595b94ebac8f891131cfa8c3834ff683679e09f3510ea7d1944073efc.
 
-No hosting vendor is selected in this roadmap. Do not create accounts, accept terms, or incur spend on the user's behalf.
+Для дальнейшего роста нужны значительно более объёмные, качественные и проверяемые данные. Для каждого набора фиксировать происхождение, лицензию/разрешение и контрольную сумму. Не использовать личные переписки, закрытые пользовательские файлы, данные аккаунтов, личную память и приватные данные QQCross без отдельного разрешённого и документированного процесса.
 
-## Release gates
+## Первый CPU-эксперимент
 
-- **Model candidate:** license and deployment reviewed; exact model ID and revision recorded.
-- **QQ checkpoint:** training dataset provenance and recipe documented; checkpoint hash retained.
-- **Benchmark:** same Russian prompts run against QQ and offline Qwen; quality is scored blind against rubrics and references.
-- **Vision/video:** real end-to-end tests pass with media payloads and timestamped outputs.
-- **Hosted service:** latency, error handling, privacy, rate limits, authentication, and operational cost measured.
-- **Product claim:** say QQ AI is stronger than Qwen only after benchmark results support that claim.
+21 ноября 2026 года выполнено настоящее обучение с нуля в бесплатной CPU-среде Vercel Sandbox:
+- PyTorch 2.14.0+cpu, NumPy 2.5.5;
+- 1 vCPU, 2 ГБ RAM;
+- Transformer: 1 слой, 2 attention heads, embedding 32, block size 64;
+- BPE vocabulary 512;
+- 31 200 параметров;
+- 500 optimizer steps, seed 20261121;
+- train loss 4.1474056;
+- validation loss 4.3777957;
+- начальная validation loss при той же случайной инициализации/конфигурации 6.2459393.
 
-## Current status
+Обучение продолжено из checkpoint: сначала шаги 0–59, затем resume со шага 60 до шага 499. Отдельный тест сравнивает веса непрерывного трёхшагового обучения и обучения через checkpoint/resume; тензоры совпали точно.
 
-As of this document, QQ AI has a provider-neutral online gateway, search-result retrieval, media UI/preparation, and a vision gateway contract. No QQ model weights have been trained, no QQ inference GPU has been provisioned, and live online generation/vision are not yet configured. The benchmark harness prepares evaluation; it does not itself prove model quality.
+Checkpoint и токенизатор созданы, повторно загружены, собственные веса переданы в QuantumGPT, генерация проверена. Генерируемый текст пока нечитаем и не является полезным диалогом. Это подтверждает работу технического контура обучения, но **не** готовность QQ Quantum как помощника.
 
-## Candidate to evaluate first (not yet selected)
+Подробные параметры, loss, SHA-256 checkpoint и пример генерации находятся в docs/QQ_QUANTUM_CPU_SMOKE_2026-11-21.md. Сами веса и производные артефакты не добавляются в Git.
 
-A concrete first candidate is **Mistral AI Ministral 3 8B Instruct**:
+## Compute и ограничения Vercel
 
-- Official model card: https://huggingface.co/mistralai/Ministral-3-8B-Instruct-2512
-- Official Mistral model documentation: https://docs.mistral.ai/models/ministral-8b-latest
-- License: Apache 2.0, as stated by Mistral and the model card.
-- It is an 8B-class instruction model with native image understanding and a documented 256k context window.
-- Mistral's language documentation explicitly includes Russian among supported languages: https://docs.mistral.ai/resources/languages
-- Mistral's vLLM instructions recommend an H200-class GPU for the documented full-precision/FP8 serving path. The 8B checkpoint file shown on Hugging Face is about 17.8 GB before runtime memory, KV cache, and vision overhead.
+- Никаких GPU, платных ресурсов, подписок или облачных вычислений без отдельного разрешения.
+- Текущая CPU-среда Sandbox: 1 vCPU, 2 ГБ RAM и ограниченная по времени сессия. Она годится для тестов малого масштаба, а не для обучения полноценной языковой модели.
+- Стандартный Vercel Python Function имеет ограничение 500 МБ на несжатый пакет. Установленная в Sandbox папка PyTorch CPU сама занимает около 766 МБ (без NumPy и остальных зависимостей), поэтому прямое включение текущего PyTorch runtime в стандартную Python Function не проходит это ограничение.
+- Не включать Large Functions beta и не обходить стандартные лимиты Hobby ради размещения PyTorch.
+- Перед онлайн-размещением изучить экспорт в более лёгкий inference runtime, измерить итоговый размер пакета и использовать только стандартно доступные бесплатные ресурсы. Если это невозможно — оставить Online в состоянии unavailable, а не подменять модель.
 
-This is a **candidate for controlled evaluation and QQ fine-tuning**, not a final selection and not a currently deployed model. It is substantially larger than the local 0.5B Qwen baseline, but parameter count alone does not prove better Russian reasoning. Run the same benchmark before claiming superiority. Quantized hosting on smaller hardware must be measured rather than assumed.
+## Интеграция в QQ-AI
+
+Существующий QQ-AI не переписывать:
+- его локальный Qwen/WebLLM режим остаётся старым отдельным режимом и не называется QQ Quantum Offline;
+- API /api/chat остаётся только шлюзом к собственному QQ Quantum Online;
+- отсутствие собственного сервера или весов отображается как недоступность;
+- интерфейс не утверждает, что модель обучена или готова, если нет проверенного checkpoint и генерации;
+- QQCross и отдельный сайт Quantum-AI не затрагивать.
+
+QQ Quantum Offline нельзя включать в пользовательский режим до появления собственного локального runtime и успешной проверки без сети. QQ Quantum Online нельзя включать до наличия собственного endpoint и проверенной генерации.
+
+## Проверки перед каждым выпуском
+
+1. BPE: Unicode, обратное преобразование, специальные токены, сохранение/загрузка.
+2. Transformer: shapes, causal mask, finite loss, deterministic generation.
+3. Training: CPU execution, train/validation loss, checkpoint round-trip, exact resume.
+4. Inference: собственные веса загружаются, ответ генерируется, ошибки и тайм-ауты корректны.
+5. API: CORS, размер запроса, поток ответа, никаких внешних LLM fallback.
+6. Offline: фактическая работа при отключённой сети на Android.
+7. Online: только собственный server endpoint, отдельно проверены search/voice/vision.
+8. Build: TypeScript, unit tests, Vercel build и проверка preview.
+
+Кнопка, тип API или статус configured сами по себе не доказывают работу функции. Каждый этап отмечать только после фактической проверки.

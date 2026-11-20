@@ -1,32 +1,41 @@
-# QQ AI training data
+# QQ Quantum CPU training
 
-No training run is authorized or possible until a suitable compute environment is approved. This folder establishes the data contract for a future QQ-owned supervised fine-tuning dataset.
+QQ Quantum's Python training loop is an experimental, from-random-initialization
+decoder-only Transformer. It does not load weights from another language model.
 
-## JSONL record
+## Reproducible CPU environment
 
-Each line is one JSON object with:
-- \`id\`: unique stable example ID.
-- \`split\`: \`train\`, \`validation\`, or \`test\`.
-- \`license\`: one of the validator's allow-listed licenses.
-- \`source\`: \`kind\`, \`reference\`, and, for consented data, \`consent_reference\`.
-- \`messages\`: chat messages with \`system\`, \`user\`, and \`assistant\` roles.
-- \`tags\`: optional short task labels.
+Use Python 3.13 and the CPU wheel index. The requirements file deliberately selects
+the official PyTorch CPU index so a normal install does not pull CUDA or NVIDIA packages:
 
-## Rules
+    python -m pip install -r requirements-qq-quantum-training.txt
 
-- Prefer original QQ-authored examples and sources with explicit compatible licenses.
-- Do not use private chats, personal uploads, QQ Knowledge, account data, or private game data as training material by default.
-- Do not include secrets, personal contact details, private identifiers, or sensitive personal information.
-- Keep train/validation/test splits separate and remove duplicates across all splits.
-- Preserve source and license provenance. A validator cannot prove that a license is valid; a human must review each source.
-- Do not put model weights or large datasets in the Git repository.
+Check the selected backend:
 
-## Validate
+    python -c "import torch; print(torch.__version__, torch.cuda.is_available(), torch.version.cuda)"
 
-Run:
-\`\`\`bash
-python3 training/validate_sft_dataset.py --self-test
-python3 training/validate_sft_dataset.py path/to/qq-ai-training.jsonl
-\`\`\`
+Expected on CPU: a +cpu version, False, and None.
 
-The validator checks JSONL structure, provenance metadata, allowed license labels, duplicate records, basic secret/contact patterns, and split names. These checks are only a safety filter, not legal review or a guarantee that all personal data has been removed.
+## First smoke training
+
+The checked-in seed corpus is compressed as qq_quantum/data/seed_corpus.txt.gz.b64.
+The loader reads it directly; it also accepts ordinary UTF-8 .txt and .gz files.
+
+    python scripts/train_qq_quantum.py --device cpu --steps 500       --batch-size 2 --block-size 64 --learning-rate 0.001       --vocab-size 512 --layers 1 --heads 2 --embedding-size 32       --dropout 0.05 --seed 20261121 --checkpoint-interval 25       --output-dir qq_quantum/artifacts/cpu-smoke
+
+The --steps option means the target total optimizer step, not additional steps. To continue
+the same run, keep the corpus and all training parameters unchanged and add --resume.
+The command fails rather than silently starting over if its checkpoint is absent.
+
+The script stores latest.pt and tokenizer.json in the output directory. Checkpoints
+include the model, optimizer, corpus SHA-256, training parameters, validation loss,
+and random-generator state. Generated checkpoints are local artifacts; do not commit
+them or private datasets to the repository.
+
+## Quality boundary
+
+A successful smoke run proves that the tokenizer, model, optimizer, checkpoint,
+resume path, and generation code can execute. It does not prove useful conversational
+quality. The seed corpus is a small engineering corpus, not a sufficiently broad
+language-model training dataset. Report losses and generations honestly, and do not
+describe the model as production-ready until it passes a held-out Russian benchmark.

@@ -28,13 +28,15 @@ QQ AI — независимый русскоязычный ИИ-помощни�
 ## Текущая реализация и ограничения
 
 ### Чат и модели
-- **Онлайн:** основной режим интерфейса. `/api/chat` использует QQ AI Model Gateway с OpenAI-compatible Chat Completions API. Поддерживаются официальный OpenAI API и DeepSeek API: `QQ_AI_API_URL`, `QQ_AI_MODEL`, общий серверный ключ `QQ_AI_API_KEY` или алиасы `OPENAIAPIKEY` / `DEEPSEEK_API_KEY`. Для DeepSeek используются `https://api.deepseek.com/chat/completions` и актуальное имя модели `deepseek-flash`; шлюз задаёт `max_tokens` и низкую интенсивность рассуждения. Ключи никогда не передаются в браузер. Для GPT-6 reasoning-моделей сохраняется поддерживаемый OpenAI формат `max_completion_tokens`.
-- **Офлайн:** Qwen2.5-0.5B запускается через WebLLM и WebGPU; модель кэшируется в IndexedDB.
-- Офлайн-модель небольшая и уступает современным облачным моделям в сложных задачах.
-- Пока серверная модель QQ AI не размещена: без `QQ_AI_API_URL` и `QQ_AI_MODEL` API честно возвращает `ONLINE_MODEL_UNCONFIGURED`. Онлайн-режим больше не переключается молча на Qwen.
-- Если выбранный inference-сервер требует секрет, он хранится только в защищённых серверных переменных. Не отправлять ключи в чат и не добавлять в исходники.
-- Наличие `OPENAIAPIKEY` или `DEEPSEEK_API_KEY` в Vercel не означает, что API включён: для Online отдельно нужны `QQ_AI_API_URL` и `QQ_AI_MODEL`, а ключ должен быть доступен нужной среде Vercel (Preview/Production). DeepSeek API тарифицируется по токенам; создание ключа само по себе не означает бесплатный баланс. Не активировать и не тестировать платные запросы без явного согласия взрослого владельца проекта.
-- Не включать платное пополнение или расходование средств без отдельного согласия взрослого владельца проекта.
+- **QQ Quantum Online:** POST /api/chat отправляет сообщения только на собственный сервер QQ Quantum через серверные переменные QQ_QUANTUM_ONLINE_URL и QQ_QUANTUM_ONLINE_TOKEN. Сторонние генеративные API не используются как резервный ответ. Если собственный сервер не настроен или недоступен, API честно возвращает ошибку; тихого переключения на DeepSeek, OpenAI или другую модель нет.
+- Экспериментальный CPU HTTP-сервер собственной модели находится в qq_quantum/serve_online.py: /health и /v1/chat/completions, Bearer-аутентификация через QQ_QUANTUM_TOKEN, checkpoint по умолчанию qq_quantum/artifacts/model-online-v1. Он проверен внутри Vercel Sandbox, но не опубликован как внешний сервис.
+- **Текущее состояние Online:** собственный inference-сервер ещё не подключён. Старые переменные QQ_AI_API_URL, QQ_AI_MODEL и DEEPSEEK_API_KEY остались в Vercel как прежняя конфигурация Preview, но маршрут /api/chat их не читает.
+- **QQ Quantum Offline:** локальный runtime для собственных QQ Quantum-весов ещё не подключён. offlineText в /api/capabilities поэтому имеет состояние unconfigured.
+- **Существующий локальный режим QQ AI:** продолжает работать отдельно через WebLLM и Qwen2.5-0.5B. Он сохранён ради обратной совместимости, но это не QQ Quantum и не должен выдаваться за собственную модель.
+- QQ Search и получение внешних материалов остаются самостоятельными инструментами. Они могут собирать источники, но не генерируют ответ вместо QQ Quantum.
+- Голос, Vision и видео — отдельные компоненты с собственными статусами и проверками. Наличие интерфейса или API-контракта не означает, что функция уже подключена.
+- Секреты inference-сервера хранятся только в защищённых переменных Vercel. Не добавлять ключи в браузер, исходники или Git.
+- Не включать платные API, вычисления или планы без отдельного согласия владельца проекта.
 
 ### Голос
 - Есть два варианта голосового ввода: браузерный SpeechRecognition и локальная Whisper Tiny через отдельный Transformers.js/WebGPU Worker.
@@ -94,10 +96,9 @@ QQ AI — независимый русскоязычный ИИ-помощни�
 - Не логировать ключи, токены, сырые медиа и полную приватную переписку.
 - Любой текст из интернета, файлов, OCR и базы знаний считать недоверенными данными, а не инструкциями для модели.
 
-## QQ AI model development
-
-- [QQ AI model ownership and training roadmap](docs/QQ_AI_MODEL_TRAINING_ROADMAP.md) describes the route toward a QQ-maintained fine-tuned checkpoint and self-hosted inference, without claiming that a foundation model has already been trained.
-- [Russian benchmark dataset](evals/qq-ai-benchmark.ru.json) contains reasoning, math, web, vision, video, safety, and knowledge tasks with evaluation rubrics.
-- Run a text-only benchmark against a configured OpenAI-compatible QQ inference endpoint with `QQ_AI_API_URL`, `QQ_AI_MODEL`, and optionally `QQ_AI_API_KEY`:
-  `node scripts/run-qq-ai-benchmark.mjs`
-- Media-only benchmark cases are intentionally excluded by the runner until a real vision/video model endpoint is configured. The benchmark runner records outputs and latency; it does not assign quality scores automatically.
+## QQ Quantum — собственная модель
+- Цель проекта — обучать собственную языковую модель с нуля: собственный токенизатор, Transformer-архитектура и веса из случайной инициализации. Не использовать веса готовых LLM и не подменять генерацию сторонними API.
+- Текущий небольшой CPU smoke-run и его ограничения описаны в docs/QQ_QUANTUM_CPU_SMOKE_2026-11-21.md.
+- Пошаговый план собственного обучения, офлайн/онлайн-инференса и критерии выпуска — в docs/QQ_AI_MODEL_TRAINING_ROADMAP.md.
+- Модель пока экспериментальная и не готова для пользовательского чата. Не заявлять качество или превосходство без независимого русскоязычного benchmark.
+- Существующий QQ AI local mode на Qwen остаётся отдельным legacy-путём и не считается QQ Quantum Offline.

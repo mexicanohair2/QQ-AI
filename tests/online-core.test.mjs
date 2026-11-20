@@ -356,10 +356,17 @@ test("offline chat does not append a user message before the local model is read
   assert.match(app, /mode === "offline" && !offlineReady\)[\s\S]*?Сначала нажми «Загрузить и запустить ИИ»[\s\S]*?return;/);
 });
 
-test("public capability response does not expose third-party model branding", async () => {
+test("capabilities distinguish QQ Quantum Offline from the legacy Qwen runtime", async () => {
   const capabilities = await readFile(new URL("../api/capabilities.ts", import.meta.url), "utf8");
-  assert.doesNotMatch(capabilities, /Qwen/i);
-  assert.match(capabilities, /offlineText: \{ state: "available" \}/);
+  const offlineStart = capabilities.indexOf("offlineText:");
+  const legacyStart = capabilities.indexOf("legacyLocalText:", offlineStart);
+  assert.ok(offlineStart >= 0 && legacyStart > offlineStart);
+  const offline = capabilities.slice(offlineStart, legacyStart);
+  const legacy = capabilities.slice(legacyStart);
+  assert.match(offline, /state: "unconfigured"/);
+  assert.doesNotMatch(offline, /Qwen/i);
+  assert.match(legacy, /state: "available"/);
+  assert.match(legacy, /Qwen2\.5-0\.5B via WebLLM/);
 });
 
 

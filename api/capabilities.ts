@@ -61,7 +61,19 @@ export default async function handler(request: Request): Promise<Response> {
       note: "Запись до 20 секунд обрабатывается локально и вставляется в поле сообщения. Модель скачивается только после явного нажатия; требуется WebGPU. Перед отправкой проверь текст. Одновременно с ней не держатся другие тяжёлые локальные модели. Физический тест Honor 400 ещё не проведён.",
     },
     videoUnderstanding: { state: hasVision ? "configured" : "unconfigured", note: "Облачная модель не подключена. Локальный режим может анализировать до четырёх выбранных кадров с временными отметками; аудиодорожка не анализируется." },
-    offlineText: { state: "available" },
+    offlineText: {
+      state: "unconfigured",
+      provider: "QQ Quantum local inference artifact not packaged",
+      model: null,
+      networkAccess: false,
+      note: "QQ Quantum Offline пока не подключена. Текущий локальный режим QQ AI отдельно использует Qwen через WebLLM и не является собственной моделью QQ Quantum.",
+    },
+    legacyLocalText: {
+      state: "available",
+      provider: "Qwen2.5-0.5B via WebLLM",
+      networkAccess: false,
+      note: "Существующий локальный резервный режим QQ AI. Не считать его QQ Quantum.",
+    },
   };
   return new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
 }

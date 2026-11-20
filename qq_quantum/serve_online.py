@@ -5,6 +5,7 @@ from pathlib import Path
 import torch
 from qq_quantum.model.tokenizer import ByteBPETokenizer
 from qq_quantum.model.transformer import GPTConfig, QuantumGPT
+from qq_quantum.model.training import _read_corpus
 
 ROOT = Path(__file__).resolve().parent
 MODEL_DIR = ROOT / "artifacts" / "model-online-v1"
@@ -49,7 +50,7 @@ def load_model():
     model = QuantumGPT(GPTConfig(**checkpoint["model_config"]))
     model.load_state_dict(checkpoint["model"])
     model.eval()
-    corpus = (ROOT / "data" / "seed_corpus.txt").read_text(encoding="utf-8")
+    corpus = _read_corpus(ROOT / "data" / "seed_corpus.txt.gz.b64")
     return model, tokenizer, load_qa(corpus), checkpoint, corpus
 
 MODEL, TOKENIZER, QA, CHECKPOINT, CORPUS = load_model()

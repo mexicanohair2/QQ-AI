@@ -1,0 +1,13 @@
+# Python runtime and generated files
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Derived corpus and generated model artifacts
+qq_quantum/data/seed_corpus.txt
+qq_quantum/artifacts/
+
+# Runtime API logs (never commit request history)
+qq_quantum/logs/
