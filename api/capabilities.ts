@@ -61,7 +61,7 @@ export default async function handler(request: Request): Promise<Response> {
       note: "Запись до 20 секунд обрабатывается локально и вставляется в поле сообщения. Модель скачивается только после явного нажатия; требуется WebGPU. Перед отправкой проверь текст. Одновременно с ней не держатся другие тяжёлые локальные модели. Физический тест Honor 400 ещё не проведён.",
     },
     videoUnderstanding: { state: hasVision ? "configured" : "unconfigured", note: "Облачная модель не подключена. Локальный режим может анализировать до четырёх выбранных кадров с временными отметками; аудиодорожка не анализируется." },
-    offlineText: { state: "available", provider: "own QQ Quantum weights", networkAccess: false },
+    offlineText: { state: "available" },
   };
   return new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
 }
