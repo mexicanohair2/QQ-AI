@@ -7,12 +7,13 @@ import {
 export const config = { runtime: "edge" };
 export default async function handler(request: Request): Promise<Response> {
   if (request.method !== "GET") return new Response(JSON.stringify({ error: "Метод не поддерживается." }), { status: 405 });
-  const modelEndpoint = safeModelEndpoint(process.env.QQ_AI_API_URL?.trim());
-  const model = process.env.QQ_AI_MODEL?.trim();
-  const modelKey = resolveModelApiKey(process.env.QQ_AI_API_KEY, process.env.DEEPSEEK_API_KEY, process.env.OPENAIAPIKEY);
-  const hasModel = Boolean(modelEndpoint && model &&
-    (!modelEndpointRequiresApiKey(modelEndpoint) || modelKey));
 
+  // Text generation is powered only by the user's own QQ Quantum service.
+  const quantumEndpoint = safeModelEndpoint(process.env.QQ_QUANTUM_ONLINE_URL?.trim());
+  const quantumToken = process.env.QQ_QUANTUM_ONLINE_TOKEN?.trim();
+  const hasModel = Boolean(quantumEndpoint && quantumToken);
+
+  // Vision remains a separate optional tool; it never replaces the language model.
   const visionEndpoint = safeModelEndpoint(process.env.QQ_AI_VISION_API_URL?.trim());
   const visionModel = process.env.QQ_AI_VISION_MODEL?.trim();
   const visionKey = resolveModelApiKey(
@@ -24,9 +25,21 @@ export default async function handler(request: Request): Promise<Response> {
   const hasVision = Boolean(visionEndpoint && visionModel &&
     (!modelEndpointRequiresApiKey(visionEndpoint) || visionKey));
   const body = {
-    onlineText: { state: hasModel ? "configured" : "unconfigured", model: hasModel ? model : null },
-    webSearch: { state: "available", provider: "DuckDuckGo HTML + Bing HTML + Wikimedia API", providers: ["DuckDuckGo", "Bing", "Wikipedia (RU)"], note: "Используются поисковые фрагменты из открытых поисковых систем и русской Википедии; полное извлечение страниц и синтез облачной моделью ещё не подключены." },
-    imageUnderstanding: { state: hasVision ? "configured" : "unconfigured", note: "Это статус облачной Vision-модели." },
+    onlineText: {
+      state: hasModel ? "configured" : "unconfigured",
+      model: hasModel ? "QQ Quantum Online" : null,
+      provider: "self-hosted QQ Quantum",
+      note: hasModel
+        ? "Подключена собственная модель QQ Quantum."
+        : "Собственная Online-модель ещё не подключена. Сторонние языковые модели не используются.",
+    },
+    webSearch: {
+      state: "available",
+      provider: "DuckDuckGo HTML + Bing HTML + Wikimedia API",
+      providers: ["DuckDuckGo", "Bing", "Wikipedia (RU)"],
+      note: "Поиск работает как отдельный инструмент. Результаты передаются только собственной QQ Quantum Online, если она подключена.",
+    },
+    imageUnderstanding: { state: hasVision ? "configured" : "unconfigured", note: "Отдельный облачный Vision-инструмент. Это не основной генератор текста." },
     localVision: {
       state: "implemented_device_check_required",
       runtime: "WebGPU browser worker",
@@ -48,7 +61,7 @@ export default async function handler(request: Request): Promise<Response> {
       note: "Запись до 20 секунд обрабатывается локально и вставляется в поле сообщения. Модель скачивается только после явного нажатия; требуется WebGPU. Перед отправкой проверь текст. Одновременно с ней не держатся другие тяжёлые локальные модели. Физический тест Honor 400 ещё не проведён.",
     },
     videoUnderstanding: { state: hasVision ? "configured" : "unconfigured", note: "Облачная модель не подключена. Локальный режим может анализировать до четырёх выбранных кадров с временными отметками; аудиодорожка не анализируется." },
-    offlineText: { state: "available" }
+    offlineText: { state: "available", provider: "own QQ Quantum weights", networkAccess: false },
   };
   return new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
 }
