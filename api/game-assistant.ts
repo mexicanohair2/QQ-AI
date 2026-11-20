@@ -59,7 +59,7 @@ export default async function handler(request: Request): Promise<Response> {
   if (cors === null) return json({ error: "Этот источник не разрешён для игрового ИИ." }, 403);
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
   if (request.method !== "POST") return json({ error: "Метод не поддерживается." }, 405, cors);
-  const apiKey = resolveModelApiKey(process.env.QQ_AI_API_KEY, process.env.OPENAIAPIKEY);
+  const apiKey = resolveModelApiKey(process.env.QQ_AI_API_KEY, process.env.DEEPSEEK_API_KEY, process.env.OPENAIAPIKEY);
   const endpoint = safeModelEndpoint(process.env.QQ_AI_API_URL?.trim());
   const model = process.env.QQ_AI_MODEL?.trim();
   if (!endpoint || !model || (modelEndpointRequiresApiKey(endpoint) && !apiKey)) {
