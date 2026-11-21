@@ -168,10 +168,27 @@ def main() -> int:
     parser.add_argument("--tokenizer", type=Path, default=DEFAULT_MODEL_DIR / "tokenizer.json")
     parser.add_argument("--corpus", type=Path, default=DEFAULT_CORPUS)
     parser.add_argument("--output", type=Path, default=DEFAULT_MODEL_DIR / "QQ_Quantum_Offline.html")
+    parser.add_argument("--assets-output", type=Path, help="Also write standalone JSON assets for automatic website loading.")
     args = parser.parse_args()
 
     assets, weights = build_assets(args.checkpoint, args.tokenizer, args.corpus)
     html = render_html(assets)
+    if args.assets_output:
+        args.assets_output.parent.mkdir(parents=True, exist_ok=True)
+        assets_bytes = (_safe_json(assets) + "\\n").encode("utf-8")
+        assets_temporary = args.assets_output.with_suffix(args.assets_output.suffix + ".tmp")
+        assets_temporary.write_bytes(assets_bytes)
+        assets_temporary.replace(args.assets_output)
+        manifest = {
+            "format": "qq-quantum-web-manifest-v1",
+            "weights_sha256": assets["metadata"]["weights_sha256"],
+            "training_step": assets["metadata"]["training_step"],
+            "asset_path": args.assets_output.name,
+        }
+        manifest_path = args.assets_output.with_name("manifest.json")
+        manifest_temporary = manifest_path.with_suffix(".json.tmp")
+        manifest_temporary.write_text(_safe_json(manifest) + "\\n", encoding="utf-8")
+        manifest_temporary.replace(manifest_path)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     temporary = args.output.with_suffix(args.output.suffix + ".tmp")
     temporary.write_bytes(html)
@@ -180,6 +197,8 @@ def main() -> int:
     print(json.dumps({
         "exported": True,
         "output": str(args.output),
+        "assets_output": str(args.assets_output) if args.assets_output else None,
+        "assets_bytes": len(assets_bytes) if args.assets_output else None,
         "html_bytes": len(html),
         "weights_bytes": assets["metadata"]["weight_bytes"],
         "weights_gzip_base64_chars": len(assets["weights_gzip_base64"]),

@@ -3,6 +3,7 @@ export type QuantumBrowserAssets = {
     format: string;
     training_step: number;
     weight_bytes: number;
+    weights_sha256: string;
     model_config: Record<string, number>;
     tensors: Record<string, { offset: number; length: number; shape: number[] }>;
   };
@@ -58,13 +59,59 @@ export async function saveQuantumAssets(assets: QuantumBrowserAssets): Promise<v
 
 export async function loadQuantumAssets(): Promise<QuantumBrowserAssets | null> {
   const db = await openDatabase();
+  let cached: QuantumBrowserAssets | null = null;
   try {
     const tx = db.transaction(STORE_NAME, "readonly");
     const value = await requestResult<QuantumBrowserAssets | undefined>(tx.objectStore(STORE_NAME).get(RECORD_KEY));
-    return value ?? null;
+    cached = value ?? null;
   } finally {
     db.close();
   }
+
+  const base = new URL(import.meta.env.BASE_URL, window.location.origin);
+  let manifest: { format: string; weights_sha256: string; asset_path: string } | null = null;
+  try {
+    const manifestResponse = await fetch(new URL("quantum/manifest.json", base), {
+      cache: "no-cache",
+      credentials: "same-origin",
+    });
+    if (manifestResponse.ok) manifest = await manifestResponse.json();
+  } catch {
+    if (cached) return cached;
+    throw new Error("Не удалось подключиться к сайту, чтобы получить QQ Quantum.");
+  }
+
+  if (manifest && manifest.format !== "qq-quantum-web-manifest-v1") {
+    throw new Error("Манифест версии QQ Quantum повреждён.");
+  }
+  if (cached && (!manifest || cached.metadata.weights_sha256 === manifest.weights_sha256)) {
+    return cached;
+  }
+  if (!manifest || !/^[a-f0-9]{64}$/.test(manifest.weights_sha256) ||
+      typeof manifest.asset_path !== "string" || !/^[a-z0-9._-]+$/i.test(manifest.asset_path)) {
+    throw new Error("Сайт не предоставил корректную версию модели QQ Quantum.");
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(new URL(`quantum/${manifest.asset_path}`, base), {
+      cache: "force-cache",
+      credentials: "same-origin",
+    });
+  } catch {
+    throw new Error("Не удалось скачать QQ Quantum с сайта. Проверь подключение к интернету и повтори попытку.");
+  }
+  if (!response.ok) {
+    throw new Error(`Сайт не смог отдать модель QQ Quantum (HTTP ${response.status}).`);
+  }
+  const assets: unknown = await response.json();
+  validateAssets(assets);
+  if (assets.metadata.weights_sha256 !== manifest.weights_sha256) {
+    throw new Error("Контрольная сумма QQ Quantum не совпала с манифестом сайта.");
+  }
+  await saveQuantumAssets(assets);
+  try { await navigator.storage?.persist?.(); } catch { /* best effort */ }
+  return assets;
 }
 
 function validateAssets(value: unknown): asserts value is QuantumBrowserAssets {
@@ -83,6 +130,9 @@ function validateAssets(value: unknown): asserts value is QuantumBrowserAssets {
       assets.weights_gzip_base64.length > MAX_WEIGHTS_BASE64 ||
       !/^[A-Za-z0-9+/]+={0,2}$/.test(assets.weights_gzip_base64)) {
     throw new Error("Файл весов QQ Quantum имеет неправильный формат.");
+  }
+  if (typeof metadata.weights_sha256 !== "string" || !/^[a-f0-9]{64}$/.test(metadata.weights_sha256)) {
+    throw new Error("Контрольная сумма весов QQ Quantum отсутствует или повреждена.");
   }
   const weightBytes = Number(metadata.weight_bytes);
   const config = metadata.model_config as Record<string, unknown> | undefined;

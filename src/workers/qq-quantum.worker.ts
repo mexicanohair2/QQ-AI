@@ -69,6 +69,11 @@ self.addEventListener("message", async (event: MessageEvent<WorkerMessage>) => {
   try {
     if (message.type === "load") {
       const bytes = await self.QQQuantumBrowser.inflateGzipBase64(message.assets.weights_gzip_base64);
+      const digest = await crypto.subtle.digest("SHA-256", bytes);
+      const actualSha256 = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+      if (actualSha256 !== message.assets.metadata.weights_sha256) {
+        throw new Error("Контрольная сумма весов QQ Quantum не совпала. Загрузка остановлена.");
+      }
       const nextTokenizer = new self.QQQuantumBrowser.ByteBPETokenizer(message.assets.tokenizer);
       const nextModel = new self.QQQuantumBrowser.QuantumBrowserModel(message.assets.metadata, bytes);
       tokenizer = nextTokenizer;

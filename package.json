@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run test:game-ai && npm run test:online-core && tsc -b && vite build",
+    "build": "npm run prepare:quantum-assets && npm run test:game-ai && npm run test:online-core && tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "test:game-ai": "node --experimental-strip-types --test tests/qqcross-ai.test.mjs",
-    "test:online-core": "node --experimental-strip-types --test tests/online-core.test.mjs tests/qq-ai-core.test.mjs tests/benchmark-schema.test.mjs tests/qq-quantum-browser.test.mjs"
+    "test:online-core": "node --experimental-strip-types --test tests/online-core.test.mjs tests/qq-ai-core.test.mjs tests/benchmark-schema.test.mjs tests/qq-quantum-browser.test.mjs",
+    "prepare:quantum-assets": "node scripts/fetch_qq_quantum_model.mjs"
   },
   "dependencies": {
     "@mlc-ai/web-llm": "0.2.88",

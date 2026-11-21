@@ -15,3 +15,7 @@ qq_quantum/logs/
 # Large external training-source archives (downloaded on demand)
 training/downloads/
 training/data/qq_quantum_dialogue_v2.txt
+
+# Generated static website model assets (downloaded at build time)
+/public/quantum/model.json
+/public/quantum/manifest.json

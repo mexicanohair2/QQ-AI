@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { gunzipSync } from "node:zlib";
+import { createHash } from "node:crypto";
 import { qqQuantumIntegration } from "../scripts/qq-quantum-vite-plugin.mjs";
 import {
   findQuantumKnowledgeAnswer,
@@ -17,6 +19,8 @@ test("Vite integration produces a local QQ Quantum mode without changing the sou
   assert.match(transformed, /QQ_Quantum_Offline\.html/);
   assert.match(transformed, /workers\/qq-quantum\.worker\.ts/);
   assert.match(transformed, /importQuantumModelHtml/);
+  assert.match(transformed, /void loadOfflineModel\\(\\)/);
+  assert.match(transformed, /первом запуске сайт скачает собственную модель/i);
   assert.match(transformed, /QQ Quantum/);
   assert.doesNotMatch(transformed, /DeepSeek|Qwen2/);
   assert.doesNotMatch(transformed, /engine\.current/);
@@ -61,4 +65,19 @@ test("browser dialogue prompt uses real newlines and fits the model window", () 
   assert.ok(encode(prompt, true).length <= 30);
   assert.ok(prompt.includes("\nПользователь:"));
   assert.ok(prompt.endsWith("\nQQ Quantum:"));
+});
+
+
+test("published website model asset matches its manifest and has intact weights", async () => {
+  const assets = JSON.parse(await readFile(new URL("public/quantum/model.json", root), "utf8"));
+  const manifest = JSON.parse(await readFile(new URL("public/quantum/manifest.json", root), "utf8"));
+  assert.equal(manifest.format, "qq-quantum-web-manifest-v1");
+  assert.equal(manifest.asset_path, "model.json");
+  assert.equal(assets.metadata.format, "qq-quantum-web-weights-v1");
+  assert.equal(assets.metadata.checkpoint_format, "qq-quantum-sft-v1");
+  assert.equal(assets.metadata.weights_sha256, manifest.weights_sha256);
+  const weights = gunzipSync(Buffer.from(assets.weights_gzip_base64, "base64"));
+  assert.equal(weights.length, assets.metadata.weight_bytes);
+  assert.equal(createHash("sha256").update(weights).digest("hex"), manifest.weights_sha256);
+  assert.ok(assets.corpus.length > 100_000);
 });

@@ -61,12 +61,13 @@ export function qqQuantumIntegration() {
     setBusy(true);
     setError("");
     setProgress(0);
-    setStatus("Проверяем локальный файл QQ Quantum…");
+    setStatus("Проверяем сохранённую копию QQ Quantum…");
     try {
       await prepareLocalRuntime("text");
+      setStatus("Первый запуск может занять несколько секунд: загружаем собственную модель с сайта…");
       const assets = await loadQuantumAssets();
       if (!assets) {
-        throw new Error("Сначала импортируй официальный файл QQ_Quantum_Offline.html через кнопку «Импортировать HTML-модель».");
+        throw new Error("Сайт не предоставил файл модели QQ Quantum.");
       }
       const worker = new Worker(new URL("./workers/qq-quantum.worker.ts", import.meta.url), { type: "module" });
       quantumWorkerRef.current = worker;
@@ -247,7 +248,7 @@ export function qqQuantumIntegration() {
 
       replaceExactlyOnce(
         'Первое скачивание модели — около 1 ГБ. Загрузи её по Wi‑Fi один раз; затем она будет доступна без интернета.',
-        'Выбери официальный HTML-файл QQ_Quantum_Offline.html. Собственные веса будут сохранены в IndexedDB и использоваться без сети.',
+        'При первом запуске сайт скачает собственную модель QQ Quantum (около 3,6 МБ) и сохранит её на устройстве. Следующие запуски доступны без повторного скачивания.',
         "replace Qwen download copy"
       );
       replaceExactlyOnce(
@@ -273,7 +274,7 @@ export function qqQuantumIntegration() {
       );
       replaceExactlyOnce(
         '<button className={mode === "offline" ? "selected" : ""} onClick={() => { setMode("offline"); setError(""); setStatus(offlineReady ? "Офлайн-модель готова" : "Сначала подготовь офлайн-модель"); }}>Офлайн</button>',
-        '<button className={mode === "offline" ? "selected" : ""} onClick={() => { setMode("offline"); setError(""); setStatus(offlineReady ? "Собственная модель QQ Quantum готова" : "Сначала импортируй пакет QQ Quantum"); }}>Quantum</button>',
+        '<button className={mode === "offline" ? "selected" : ""} onClick={() => { setMode("offline"); setError(""); if (!offlineReady) void loadOfflineModel(); else setStatus("Собственная модель QQ Quantum готова"); }}>Quantum</button>',
         "rename local mode button"
       );
       replaceExactlyOnce(
