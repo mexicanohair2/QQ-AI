@@ -7,7 +7,7 @@ const root = process.cwd();
 const modelPath = resolve(root, "server/quantum/model.json");
 const manifestPath = resolve(root, "server/quantum/manifest.json");
 const sourceUrl = process.env.QQ_QUANTUM_MODEL_SOURCE_URL ||
-  "https://qq-ai-preview-git-feature-qq-quantum-dual-mode-mexicanohaie.vercel.app/quantum/model.json";
+  "https://qq-ai-preview-6pzezt4y1-mexicanohaie.vercel.app/quantum/model.json";
 const maxBytes = 10 * 1024 * 1024;
 
 async function downloadModel() {

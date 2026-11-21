@@ -13,6 +13,12 @@ test("online route uses the bundled self-hosted QQ Quantum runtime", async () =>
   assert.match(runtime, /findQuantumKnowledgeAnswer/);
 });
 
+test("build-time model source is pinned to an immutable deployment, not the mutable branch alias", async () => {
+  const script = await readFile(new URL("../scripts/fetch_qq_quantum_model.mjs", import.meta.url), "utf8");
+  assert.match(script, /qq-ai-preview-6pzezt4y1-mexicanohaie\.vercel\.app\/quantum\/model\.json/);
+  assert.doesNotMatch(script, /qq-ai-preview-git-feature-qq-quantum-dual-mode/);
+});
+
 test("web search is a separate endpoint and is never misrepresented as model synthesis", async () => {
   const chat = await readFile(new URL("../api/chat.ts", import.meta.url), "utf8");
   const search = await readFile(new URL("../api/search.ts", import.meta.url), "utf8");
