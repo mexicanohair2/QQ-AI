@@ -19,7 +19,7 @@ export function qqQuantumIntegration() {
 
       replaceExactlyOnce(
         'import { readOpenAIChatStream } from "./lib/openai-stream";',
-        'import { readOpenAIChatStream } from "./lib/openai-stream";\nimport { importQuantumModelHtml, loadQuantumAssets } from "./lib/qq-quantum-assets";',
+        'import { readOpenAIChatStream } from "./lib/openai-stream";\nimport { loadQuantumAssets } from "./lib/qq-quantum-assets";',
         "add Quantum assets import"
       );
       replaceExactlyOnce(
@@ -27,7 +27,7 @@ export function qqQuantumIntegration() {
         `  const quantumWorkerRef = useRef<Worker | null>(null);
   const quantumLoadPendingRef = useRef<{ resolve: () => void; reject: (error: Error) => void; timer: number } | null>(null);
   const quantumRequestRef = useRef<{ id: string; resolve: (answer: string) => void; reject: (error: Error) => void; timer: number } | null>(null);
-  const quantumFileInputRef = useRef<HTMLInputElement>(null);`,
+`,
         "replace WebLLM engine state"
       );
       replaceExactlyOnce(
@@ -159,41 +159,6 @@ export function qqQuantumIntegration() {
     }
   }
 
-  async function importQuantumModel(file: File) {
-    if (busy) return;
-    setBusy(true);
-    setError("");
-    setStatus("Проверяем HTML-файл и сохраняем собственные веса QQ Quantum…");
-    try {
-      const assets = await importQuantumModelHtml(file);
-      const previousWorker = quantumWorkerRef.current;
-      if (previousWorker) {
-        const loadPending = quantumLoadPendingRef.current;
-        const requestPending = quantumRequestRef.current;
-        quantumLoadPendingRef.current = null;
-        quantumRequestRef.current = null;
-        if (loadPending) {
-          window.clearTimeout(loadPending.timer);
-          loadPending.reject(new Error("Загрузка заменена новой версией QQ Quantum."));
-        }
-        if (requestPending) {
-          window.clearTimeout(requestPending.timer);
-          requestPending.reject(new Error("Модель заменена новой версией QQ Quantum."));
-        }
-        previousWorker.terminate();
-        quantumWorkerRef.current = null;
-      }
-      setOfflineReady(false);
-      setStatus("Модель QQ Quantum сохранена локально · шаг " + assets.metadata.training_step + ". Нажми «Загрузить QQ Quantum».");
-      setProgress(100);
-    } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "Не удалось импортировать QQ Quantum.");
-      setStatus("Импорт модели не выполнен");
-    } finally {
-      setBusy(false);
-    }
-  }
-
 `;
       code = code.slice(0, loadStart) + loadBlock + code.slice(searchStart);
 
@@ -203,7 +168,7 @@ export function qqQuantumIntegration() {
       const offlineBlock = `  async function sendOffline(history: Message[]) {
     const worker = quantumWorkerRef.current;
     if (!worker || !offlineReady) {
-      throw new Error("Собственная модель QQ Quantum не загружена. Импортируй HTML-файл модели и нажми «Загрузить модель».");
+      throw new Error("Собственная модель QQ Quantum не загружена. Загрузи QQ Quantum с сайта и повтори попытку.");
     }
     if (quantumRequestRef.current) throw new Error("QQ Quantum уже обрабатывает предыдущий запрос.");
     const requestId = crypto.randomUUID();
@@ -242,7 +207,7 @@ export function qqQuantumIntegration() {
 
       replaceExactlyOnce(
         '          <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm" multiple hidden onChange={handleFileSelection} />',
-        '          <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm" multiple hidden onChange={handleFileSelection} />\n          <input ref={quantumFileInputRef} type="file" accept=".html,text/html" hidden onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (file) void importQuantumModel(file); }} />',
+        '          <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm" multiple hidden onChange={handleFileSelection} />',
         "add own model HTML importer"
       );
 
@@ -253,12 +218,12 @@ export function qqQuantumIntegration() {
       );
       replaceExactlyOnce(
         '<button className="primary" onClick={loadOfflineModel} disabled={busy}>{busy ? "Загрузка…" : "Загрузить модель"}</button>',
-        '<button className="primary" onClick={loadOfflineModel} disabled={busy}>{busy ? "Загрузка…" : "Загрузить QQ Quantum"}</button><button className="secondary-button" onClick={() => quantumFileInputRef.current?.click()} disabled={busy}>Импортировать HTML-модель</button>',
+        '<button className="primary" onClick={loadOfflineModel} disabled={busy}>{busy ? "Загрузка…" : "Загрузить QQ Quantum"}</button>',
         "add own model import action"
       );
       replaceExactlyOnce(
         '<button onClick={loadOfflineModel} disabled={busy}>Подготовить</button>',
-        '<button onClick={loadOfflineModel} disabled={busy}>Загрузить QQ Quantum</button><button onClick={() => quantumFileInputRef.current?.click()} disabled={busy}>Импортировать HTML-модель</button>',
+        '<button onClick={loadOfflineModel} disabled={busy}>Загрузить QQ Quantum</button>',
         "add import action in conversation"
       );
       replaceExactlyOnce(

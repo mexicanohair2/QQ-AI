@@ -9,7 +9,7 @@ const assetDirectory = resolve(root, "public/quantum");
 const modelPath = resolve(assetDirectory, "model.json");
 const manifestPath = resolve(assetDirectory, "manifest.json");
 const sourceUrl = process.env.QQ_QUANTUM_ASSET_URL ||
-  "https://qq-ai-preview-ce26dsuj3-mexicanohaie.vercel.app/quantum/model.json";
+  "https://qq-ai-preview-git-feature-qq-quantum-dual-mode-mexicanohaie.vercel.app/quantum/model.json";
 
 async function atomicWrite(path, content) {
   const temporary = path + ".tmp";
