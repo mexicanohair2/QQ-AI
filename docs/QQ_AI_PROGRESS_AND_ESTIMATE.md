@@ -28,22 +28,24 @@ Last verified: 2026-11-18 (feature-branch code commit `cdf48428104e0005359e7dd91
 | Video | Local mode samples up to four evenly distributed timestamped frames and analyzes them in the browser; audio is not uploaded | Device test, quality checks across clips, and separate audio transcription/synchronized audio-video analysis |
 | Voice | Browser SpeechRecognition fallback plus explicit local Whisper Tiny WebGPU worker; ≤20-second microphone recording is converted to 16 kHz mono and inserted as an editable draft | Physical device test, Russian accuracy/performance and Honor 400 compatibility |
 | QQ Knowledge | Product contracts/planning only | Document ingestion, indexing, retrieval, source attribution, access controls and deletion |
-| QQ-owned model | Candidate research, benchmark, data contract and validator | Select base/revision, curate approved data, train QQ checkpoint, evaluate, quantize and host |
+| QQ-owned model | From-scratch Transformer, byte-level BPE, CPU training/checkpoint pipeline and held-out benchmark exist; 31,200-parameter smoke model and separate 478,720-parameter prototype were tested. Free-form generation remains poor. | Compute-feasibility gate, substantially larger reviewed corpus, medium-scale architecture/training, held-out evaluation and online hosting |
 | QQ Game AI | Server contract and tests; same QQ Online gateway | Live model test; later integration into QQCross only after explicit approval |
 
 ## What is the main blocker?
 
-The online gateway is application code, not a neural network. The repository does not yet contain trained QQ weights or a running GPU inference server. Vercel preview hosting builds the web app and API routes; it is not a persistent GPU model host.
+The binding model-ownership rule is documented in `docs/QQ_QUANTUM_FROM_SCRATCH_CHARTER.md`: QQ Quantum must be trained from scratch. The earlier open-weight-base proposal in this document is obsolete.
+
+The online gateway is application code, not the model itself. The repository contains QQ-owned weights trained from random initialization, but the tested checkpoints are tiny engineering prototypes and do not yet produce useful general conversation. There is no deployed persistent inference server for a medium-capability QQ model. Vercel preview hosting builds the web app and API routes; it is not a persistent GPU model host.
 
 A secret/API key cannot create a model or GPU. For a QQ-controlled deployment, the server needs a model endpoint and model weights. A key is optional only if the chosen private inference host requires authentication; it is not something the assistant can invent.
 
-The practical first QQ model is a QQ fine-tuned/adapted checkpoint based on a reviewed open-weight base. Training a foundation model from random initialization is a separate, much larger research project. The project must not claim superiority to Qwen until both models pass the same Russian benchmark.
+The agreed target is a medium-capability QQ Quantum model trained entirely from random initialization with QQ-owned architecture, tokenizer, corpus, checkpoints and inference code. No pretrained third-party weights or external LLM generation are permitted. The immediate blocker is reliable, no-cost compute and a sufficiently broad reviewed corpus. Do not silently switch to a pretrained base model if this becomes difficult.
 
 ## Planning estimate (not a promise)
 
 These are engineering estimates after the required compute path and model revision are available. Free GPU availability, queue time, model compatibility, and device testing can change them.
 
-1. **First live QQ Online text model:** approximately 3–7 working days to connect, deploy and test a suitable already-trained open-weight model on approved GPU hosting. This would be a hosted base model, not yet proof of QQ fine-tuning or superiority.
+1. **Medium QQ Quantum feasibility and training:** timeline depends on a verified no-cost GPU path, corpus size and target parameter count. A small CPU prototype is already proven; medium-scale training from scratch is a materially larger task and must be planned from measured throughput rather than guessed.
 2. **First QQ-adapted text checkpoint:** approximately 2–4 additional weeks for a small, reviewed training dataset, supervised fine-tuning, regression tests, benchmark comparison, quantization and deployment. Longer if the free compute window is insufficient.
 3. **Real image understanding:** approximately 1–2 additional weeks after selecting and hosting a compatible vision model, including OCR, tables, formulas, charts and screenshot tests.
 4. **Video plus audio:** approximately 1–3 additional weeks after image inference, because frame sampling alone does not understand the soundtrack; audio transcription and timestamp alignment are separate work.
