@@ -16,7 +16,8 @@ const root = new URL("../", import.meta.url);
 test("Vite integration produces a local QQ Quantum mode without changing the source App", async () => {
   const app = await readFile(new URL("src/App.tsx", root), "utf8");
   const transformed = qqQuantumIntegration().transform(app, "/project/src/App.tsx").code;
-  assert.match(transformed, /QQ_Quantum_Offline\.html/);
+  assert.match(transformed, /loadQuantumAssets/);
+  assert.match(transformed, /Первый запуск может занять несколько секунд/);
   assert.match(transformed, /workers\/qq-quantum\.worker\.ts/);
   assert.match(transformed, /importQuantumModelHtml/);
   assert.match(transformed, /void loadOfflineModel\\(\\)/);

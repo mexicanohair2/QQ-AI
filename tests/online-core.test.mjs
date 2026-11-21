@@ -941,6 +941,7 @@ test("QQ Quantum offline HTML parser extracts nested JSON without evaluating scr
       format: "qq-quantum-web-weights-v1",
       training_step: 1000,
       weight_bytes: 4,
+      weights_sha256: "a".repeat(64),
       model_config: { vocab_size: 261, block_size: 8, n_layer: 1, n_head: 1, n_embd: 4 },
       tensors: { test: { offset: 0, length: 1, shape: [1] } },
     },
