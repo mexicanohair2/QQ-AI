@@ -1011,6 +1011,29 @@ test("QQ Quantum browser Transformer matches Python logits using the same export
   }
 });
 
+test("QQ Quantum refuses to pass short ungrounded fragments off as factual answers", async () => {
+  const { answerWithQuantum } = await import("../src/lib/qq-quantum-server.ts");
+  const answer = await answerWithQuantum([
+    { role: "user", content: "Опиши несуществующий кристалл зоралиума и его свойства" },
+  ]);
+  assert.ok(answer.includes("Я пока не могу надёжно сформулировать ответ"));
+  assert.ok(!answer.includes("Солнечный свет, но име"));
+});
+
+test("QQ Quantum checks the previous user turn before free generation on a follow-up", async () => {
+  const { answerWithQuantum } = await import("../src/lib/qq-quantum-server.ts");
+  const answer = await answerWithQuantum([
+    { role: "user", content: "Расскажи о Солнечной системе." },
+    { role: "assistant", content: "Солнечная система включает Солнце и планеты, которые движутся вокруг него." },
+    { role: "user", content: "А что находится в её центре?" },
+  ]);
+  assert.ok(
+    answer.includes("Я пока не могу надёжно сформулировать ответ") ||
+    answer.includes("Солнце"),
+    "A follow-up must be retrieved from context or explicitly refused, not answered with free-form gibberish.",
+  );
+});
+
 test("status endpoint loads and verifies the bundled model through the named GET handler", async () => {
   const source = await readFile(new URL("../api/status.ts", import.meta.url), "utf8");
   assert.ok(source.includes("export async function GET(request: Request): Promise<Response>"));

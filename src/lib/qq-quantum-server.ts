@@ -69,17 +69,31 @@ function isGrounded(text: string, knownWords: Set<string>): boolean {
   const words = (text.toLocaleLowerCase("ru-RU").match(/[а-яёa-z0-9]+/gi) ?? [])
     .filter(word => word.length >= 3)
     .map(normalizeQuantumWord);
-  if (words.length < 3) return false;
-  let known = 0;
-  for (const word of words) if (knownWords.has(word)) known++;
-  return known / words.length >= 0.7 && new Set(words).size / words.length >= 0.55;
+  if (words.length < 9 || words.length > 50) return false;
+
+  const uniqueRatio = new Set(words).size / words.length;
+  const knownRatio = words.filter(word => knownWords.has(word)).length / words.length;
+  const hasSentenceEnding = /[.!?…]$/.test(text.trim());
+  const hasFiniteVerb = /\\b(?:является|бывает|был|была|были|будет|будут|может|могут|должен|должна|должны|позволяет|помогает|использует|включает|содержит|работает|создаёт|создает|выполняет|учится|обучается|называется|означает|состоит|производит|применяется|происходит|представляет|обеспечивает|связано|связан|связана|нужно|нужен|нужна|нужны|содержат|показывает|определяет|объясняет|относится|выполняют|образует|находится|считается)\\b/i.test(text);
+  const noRunawayRepetition = Math.max(...[...new Set(words)].map(word => words.filter(item => item === word).length)) <= 3;
+
+  return knownRatio >= 0.9 &&
+    uniqueRatio >= 0.62 &&
+    hasSentenceEnding &&
+    hasFiniteVerb &&
+    noRunawayRepetition;
 }
 
 export async function answerWithQuantum(messages: QuantumMessage[]): Promise<string> {
   const lastUser = [...messages].reverse().find(item => item.role === "user")?.content?.trim() ?? "";
   if (!lastUser) return "Напиши вопрос или задачу.";
   const runtime = await getRuntime();
-  const known = findQuantumKnowledgeAnswer(lastUser, runtime.knowledge);
+  const userTurns = messages.filter(item => item.role === "user").map(item => item.content.trim()).filter(Boolean);
+  const previousUser = userTurns.length > 1 ? userTurns[userTurns.length - 2] : "";
+  const known = findQuantumKnowledgeAnswer(lastUser, runtime.knowledge) ??
+    (previousUser
+      ? findQuantumKnowledgeAnswer(previousUser + " " + lastUser, runtime.knowledge)
+      : null);
   if (known) return known;
   const prompt = buildQuantumPrompt(messages, runtime.tokenizer.encode.bind(runtime.tokenizer), runtime.model.cfg.block_size);
   const ids = runtime.tokenizer.encode(prompt, true, false);
