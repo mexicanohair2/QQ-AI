@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [prototype/phase-1-chat, main]
   push:
-    branches: [prototype/phase-1-chat, feature/multimodal-search-voice, feature/qq-ai-online-core]
+    branches: [prototype/phase-1-chat, feature/multimodal-search-voice, feature/qq-ai-online-core, feature/qq-quantum-dual-mode]
 
 permissions:
   contents: read

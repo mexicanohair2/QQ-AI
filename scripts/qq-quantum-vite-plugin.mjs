@@ -126,6 +126,9 @@ export function qqQuantumIntegration() {
           quantumRequestRef.current = null;
           requestPending.reject(failure);
         }
+        if (quantumWorkerRef.current === worker) quantumWorkerRef.current = null;
+        setOfflineReady(false);
+        setStatus("Рабочий поток QQ Quantum остановлен.");
       };
       await new Promise<void>((resolve, reject) => {
         const timer = window.setTimeout(() => {
@@ -135,7 +138,15 @@ export function qqQuantumIntegration() {
           reject(new Error("Загрузка QQ Quantum заняла слишком много времени. Проверь свободную память браузера."));
         }, 120000);
         quantumLoadPendingRef.current = { resolve, reject, timer };
-        worker.postMessage({ type: "load", assets });
+        try {
+          worker.postMessage({ type: "load", assets });
+        } catch (failure) {
+          window.clearTimeout(timer);
+          quantumLoadPendingRef.current = null;
+          worker.terminate();
+          if (quantumWorkerRef.current === worker) quantumWorkerRef.current = null;
+          reject(failure instanceof Error ? failure : new Error("Не удалось запустить QQ Quantum."));
+        }
       });
       try { await navigator.storage?.persist?.(); } catch { /* best effort */ }
     } catch (failure) {
@@ -154,7 +165,25 @@ export function qqQuantumIntegration() {
     setStatus("Проверяем HTML-файл и сохраняем собственные веса QQ Quantum…");
     try {
       const assets = await importQuantumModelHtml(file);
-      setStatus("Модель QQ Quantum сохранена локально · шаг " + assets.metadata.training_step + ". Нажми «Загрузить модель».");
+      const previousWorker = quantumWorkerRef.current;
+      if (previousWorker) {
+        const loadPending = quantumLoadPendingRef.current;
+        const requestPending = quantumRequestRef.current;
+        quantumLoadPendingRef.current = null;
+        quantumRequestRef.current = null;
+        if (loadPending) {
+          window.clearTimeout(loadPending.timer);
+          loadPending.reject(new Error("Загрузка заменена новой версией QQ Quantum."));
+        }
+        if (requestPending) {
+          window.clearTimeout(requestPending.timer);
+          requestPending.reject(new Error("Модель заменена новой версией QQ Quantum."));
+        }
+        previousWorker.terminate();
+        quantumWorkerRef.current = null;
+      }
+      setOfflineReady(false);
+      setStatus("Модель QQ Quantum сохранена локально · шаг " + assets.metadata.training_step + ". Нажми «Загрузить QQ Quantum».");
       setProgress(100);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Не удалось импортировать QQ Quantum.");
@@ -188,7 +217,13 @@ export function qqQuantumIntegration() {
         role: item.role,
         content: String(item.content || "").slice(0, 3000),
       }));
-      worker.postMessage({ type: "chat", requestId, messages: safeHistory });
+      try {
+        worker.postMessage({ type: "chat", requestId, messages: safeHistory });
+      } catch (failure) {
+        window.clearTimeout(timer);
+        quantumRequestRef.current = null;
+        reject(failure instanceof Error ? failure : new Error("Не удалось передать запрос в QQ Quantum."));
+      }
     }).then(answer => {
       setMessages([...history, { role: "assistant", content: answer }]);
       return answer;
@@ -230,6 +265,66 @@ export function qqQuantumIntegration() {
         'Собственная более мощная модель QQ Quantum Online ещё обучается и пока не подключена к серверу.',
         "remove external LLM dependency copy"
       );
+
+      replaceExactlyOnce(
+        '  const modeLabel = useMemo(() => mode === "online" ? "Онлайн" : "Офлайн", [mode]);',
+        '  const modeLabel = useMemo(() => mode === "online" ? "Онлайн" : "QQ Quantum", [mode]);',
+        "rename offline label to QQ Quantum"
+      );
+      replaceExactlyOnce(
+        '<button className={mode === "offline" ? "selected" : ""} onClick={() => { setMode("offline"); setError(""); setStatus(offlineReady ? "Офлайн-модель готова" : "Сначала подготовь офлайн-модель"); }}>Офлайн</button>',
+        '<button className={mode === "offline" ? "selected" : ""} onClick={() => { setMode("offline"); setError(""); setStatus(offlineReady ? "Собственная модель QQ Quantum готова" : "Сначала импортируй пакет QQ Quantum"); }}>Quantum</button>',
+        "rename local mode button"
+      );
+      replaceExactlyOnce(
+        'Подготовить офлайн-модель',
+        'Подготовить собственную QQ Quantum',
+        "rename local model card"
+      );
+      replaceExactlyOnce(
+        'mode === "offline" ? "Локальная модель" :',
+        'mode === "offline" ? "Собственная модель QQ Quantum" :',
+        "label the actual local model"
+      );
+      replaceExactlyOnce(
+        'Открыть офлайн-режим',
+        'Открыть QQ Quantum',
+        "rename offline mode action"
+      );
+      replaceExactlyOnce(
+        'Офлайн-модель готова',
+        'Собственная модель QQ Quantum готова',
+        "rename local ready status"
+      );
+      replaceExactlyOnce(
+        'Сообщение для локальной модели…',
+        'Сообщение для QQ Quantum…',
+        "rename local composer placeholder"
+      );
+      replaceExactlyOnce(
+        'Онлайн-модель QQ AI не настроена на сервере. Проверь адрес API, название модели и наличие серверного ключа DeepSeek для Preview. Офлайн-режим автоматически не включается.',
+        'Собственная модель QQ Quantum Online ещё не подключена к серверу. Переключись на Quantum для локального общения после импорта пакета модели.',
+        "remove third-party generation configuration from chat errors"
+      );
+      replaceExactlyOnce(
+        'В офлайн-режиме сетевые запросы отключены. Переключись на Онлайн для поиска в интернете.',
+        'Поиск в интернете запускается отдельно; ответы в режиме Quantum формируются локальной собственной моделью.',
+        "describe local mode search behavior"
+      );
+      code = code.replaceAll("Офлайн-модель не загружена", "QQ Quantum не загружена");
+      code = code.replaceAll("Офлайн-модель не готова", "QQ Quantum не готова");
+
+      replaceExactlyOnce(
+        'const MODEL_ID = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";\n',
+        "",
+        "remove unused third-party text-model identifier"
+      );
+      code = code
+        .replaceAll("Офлайн-режим", "режим QQ Quantum")
+        .replaceAll("Офлайн-модель", "QQ Quantum")
+        .replaceAll("Офлайн", "QQ Quantum")
+        .replaceAll("Локальная модель формирует ответ…", "QQ Quantum формирует ответ…")
+        .replaceAll("Локальная модель не ответила за отведённое время", "QQ Quantum не ответила за отведённое время");
 
       if (code.includes("engine.current")) {
         throw new Error("[qq-quantum] An unpatched WebLLM engine reference remains in App.tsx.");

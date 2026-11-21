@@ -30,7 +30,11 @@ def normalize_word(word: str) -> str:
     if not re.fullmatch(r"[а-яё]+", value) or len(value) < 5:
         return value
     for suffix in _RU_SUFFIXES:
-        if value.endswith(suffix) and len(value) - len(suffix) >= 3:
+        stem_length = len(value) - len(suffix)
+        # Avoid stripping an adjectival ending from a short noun stem:
+        # "систему" belongs with "система", not with the artificial stem "сист".
+        needs_longer_stem = suffix in {"его", "ого", "ему", "ому", "ыми", "ими"}
+        if value.endswith(suffix) and stem_length >= (5 if needs_longer_stem else 3):
             return value[:-len(suffix)]
     return value
 

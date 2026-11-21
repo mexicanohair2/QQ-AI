@@ -11,6 +11,15 @@ Last checked: 2026-11-21
 - The current selected experimental checkpoint is `model-dialogue-v4-sft-refine-best` (6.27 MiB). It is deliberately not committed to this public repository.
 - Unknown questions fail closed instead of returning ungrounded generated text.
 
+## Browser-owned QQ Quantum mode
+
+- The web app now has a separate Quantum mode. It does not reuse the legacy offline model or silently fall back to a third-party LLM.
+- A user can import a self-contained QQ_Quantum_Offline.html model package. The browser validates the package, saves it into IndexedDB, and runs the model in a dedicated worker.
+- The model package is approximately 3.4 MiB for the currently selected experimental checkpoint. It includes the model weights, tokenizer, and the authored knowledge corpus.
+- The selected SFT checkpoint uses the qq-quantum-sft-v1 format. The exporter supports both pretraining and SFT checkpoints and uses the shared completed-step counter so SFT metadata is not off by one.
+- An actual package was exported and its compressed weights checksum was verified in a private development sandbox. The package itself was not added to this public repository or deployed to the site.
+- The browser chat can only run after the user has obtained and imported that HTML package on the target device. Browser storage is per browser/device; it is not synced through the website.
+
 ## Remaining blockers before a public chat works
 
 1. **A durable public inference host is not connected.** The current Python API is running only in a temporary private development sandbox. That URL is not a production endpoint.
@@ -23,7 +32,7 @@ Last checked: 2026-11-21
 
 - No Railway project is currently connected to the account, so no Railway service has been created and no paid hosting has been provisioned.
 - The Vercel development sandbox is temporary and must not be treated as a production server.
-- No public website has been switched to the experimental model.
+- No public website has been switched to the experimental model. The browser-mode UI is implemented on the feature branch, but the model package is not yet hosted for one-tap download.
 - QQCross has not been modified.
 
 ## Runtime configuration

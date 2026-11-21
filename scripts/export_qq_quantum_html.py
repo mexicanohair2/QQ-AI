@@ -10,6 +10,7 @@ import json
 import math
 from pathlib import Path
 import sys
+import subprocess
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,13 +21,16 @@ import numpy as np
 import torch
 
 from qq_quantum.model.tokenizer import ByteBPETokenizer
-from qq_quantum.model.training import _read_corpus
+from qq_quantum.model.training import _read_corpus, completed_training_step
 from qq_quantum.model.transformer import GPTConfig, QuantumGPT
 
 ASSET_FORMAT = "qq-quantum-web-weights-v1"
 TOKENIZER_FORMAT = "qq-byte-bpe-v1"
 MAX_HTML_BYTES = 8 * 1024 * 1024
 MAX_WEIGHTS_BASE64 = 6 * 1024 * 1024
+SUPPORTED_CHECKPOINT_FORMATS = {"qq-quantum-checkpoint-v2", "qq-quantum-sft-v1"}
+DEFAULT_MODEL_DIR = ROOT / "qq_quantum/artifacts/model-dialogue-v4-sft-refine-best"
+DEFAULT_CORPUS = ROOT / "training/data/qq_quantum_dialogue_v2.txt"
 
 
 def _safe_json(value: Any) -> str:
@@ -39,14 +43,28 @@ def _safe_json(value: Any) -> str:
     )
 
 
+def ensure_curriculum_corpus(corpus_path: Path) -> None:
+    """Build the tracked, authored curriculum when a clean checkout has no generated corpus."""
+    if corpus_path.is_file():
+        return
+    if corpus_path.resolve() != DEFAULT_CORPUS.resolve():
+        raise FileNotFoundError(f"Corpus file does not exist: {corpus_path}")
+    builder = ROOT / "training" / "build_dialogue_corpus.py"
+    subprocess.run([sys.executable, str(builder)], cwd=ROOT, check=True)
+    if not corpus_path.is_file():
+        raise RuntimeError("The QQ Quantum corpus builder completed without creating its output.")
+
+
 def build_assets(
     checkpoint_path: Path,
     tokenizer_path: Path,
     corpus_path: Path,
 ) -> tuple[dict[str, Any], bytes]:
+    ensure_curriculum_corpus(corpus_path)
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
-    if checkpoint.get("format") != "qq-quantum-checkpoint-v2":
-        raise ValueError("Unsupported QQ Quantum checkpoint format")
+    checkpoint_format = checkpoint.get("format")
+    if checkpoint_format not in SUPPORTED_CHECKPOINT_FORMATS:
+        raise ValueError(f"Unsupported QQ Quantum checkpoint format: {checkpoint_format!r}")
 
     config_data = checkpoint.get("model_config")
     if not isinstance(config_data, dict):
@@ -104,7 +122,8 @@ def build_assets(
 
     metadata = {
         "format": ASSET_FORMAT,
-        "training_step": int(checkpoint["step"]) + 1,
+        "checkpoint_format": checkpoint_format,
+        "training_step": completed_training_step(checkpoint),
         "validation_loss": float(validation_loss) if validation_loss is not None else None,
         "weight_bytes": len(weights),
         "weights_sha256": hashlib.sha256(weights).hexdigest(),
@@ -145,10 +164,10 @@ def render_html(assets: dict[str, Any]) -> bytes:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--checkpoint", type=Path, default=ROOT / "qq_quantum/artifacts/model-online-v1/latest.pt")
-    parser.add_argument("--tokenizer", type=Path, default=ROOT / "qq_quantum/artifacts/model-online-v1/tokenizer.json")
-    parser.add_argument("--corpus", type=Path, default=ROOT / "qq_quantum/data/seed_corpus.txt.gz.b64")
-    parser.add_argument("--output", type=Path, default=ROOT / "qq_quantum/artifacts/model-online-v1/QQ_Quantum_Offline.html")
+    parser.add_argument("--checkpoint", type=Path, default=DEFAULT_MODEL_DIR / "latest.pt")
+    parser.add_argument("--tokenizer", type=Path, default=DEFAULT_MODEL_DIR / "tokenizer.json")
+    parser.add_argument("--corpus", type=Path, default=DEFAULT_CORPUS)
+    parser.add_argument("--output", type=Path, default=DEFAULT_MODEL_DIR / "QQ_Quantum_Offline.html")
     args = parser.parse_args()
 
     assets, weights = build_assets(args.checkpoint, args.tokenizer, args.corpus)
@@ -166,6 +185,7 @@ def main() -> int:
         "weights_gzip_base64_chars": len(assets["weights_gzip_base64"]),
         "weights_sha256": assets["metadata"]["weights_sha256"],
         "model_sha256": hashlib.sha256(html).hexdigest(),
+        "checkpoint_format": assets["metadata"]["checkpoint_format"],
         "training_step": assets["metadata"]["training_step"],
         "model_config": assets["metadata"]["model_config"],
         "tensor_count": len(assets["metadata"]["tensors"]),
