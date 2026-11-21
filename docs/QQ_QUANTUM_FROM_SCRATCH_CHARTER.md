@@ -16,7 +16,15 @@ Build QQ Quantum as our own medium-capability neural language model, developed c
 4. Do not import third-party pretrained weights, LoRA/adapter weights, or a distilled third-party model.
 5. Do not silently route prompts to an external generative model. QQ Quantum generates the answer itself.
 6. External web search and factual-data retrieval are allowed as tools. They return evidence and source links; QQ Quantum remains responsible for reasoning and writing the answer.
-7. Keep the seven agreed capability directions in the master roadmap. Each direction needs its own tests and measurable acceptance criteria; a UI button alone does not count as implementation.
+7. Implement and test all seven agreed capability directions:
+   - search and information processing (web search, page reading, summarization, source comparison, dates, links, uncertainty);
+   - background tasks (scheduled/periodic tasks, monitoring, notifications where the platform truly supports them);
+   - help with work, study, and everyday tasks (explanations, calculations, planning, document analysis);
+   - text work (writing, editing, proofreading, translation, structuring, summarization);
+   - photo and video understanding/processing, limited to formats and operations actually implemented;
+   - natural conversation (text dialogue; voice input/output only where genuinely supported);
+   - dialogue continuity (current-session context and user-controlled memory across sessions).
+   Each direction needs its own tests and measurable acceptance criteria; a UI button alone does not count as implementation.
 8. Work on the separate QQ-AI repository and feature branch. Do not change QQCross or integrate into it until the QQ Quantum module has passed its gates and the owner explicitly authorizes integration.
 9. The active product stage is online-only. Offline/browser weight downloads remain deferred.
 10. Do not enable paid GPU services or paid APIs without explicit approval.
