@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from torch.optim import AdamW
 from .tokenizer import ByteBPETokenizer
+from training.corpus_utils import load_corpus_manifest
 from .transformer import GPTConfig, QuantumGPT
 CHECKPOINT_FORMAT="qq-quantum-checkpoint-v2"
 SPLIT_POLICY="seeded-normalized-document-group-split-v3"
@@ -116,12 +117,20 @@ def train(*,corpus_path:str,output_dir:str,max_steps:int=300,batch_size:int=16,b
     output=Path(output_dir);output.mkdir(parents=True,exist_ok=True)
     corpus=_read_corpus(corpus_path)
     corpus_sha=hashlib.sha256(corpus.encode()).hexdigest()
+    corpus_manifest = load_corpus_manifest(
+        corpus_path, corpus_sha, expected_split_policy=SPLIT_POLICY
+    )
     if len(corpus)<block_size*2+4: raise ValueError("Corpus too short")
     train_text, validation_text = _split_corpus_documents(corpus, validation_fraction, seed)
     tok_path,ckpt_path=output/"tokenizer.json",output/"latest.pt"
     requested={"seed":seed,"batch_size":batch_size,"block_size":block_size,"learning_rate":learning_rate,
        "vocab_size":vocab_size,"n_layer":n_layer,"n_head":n_head,"n_embd":n_embd,"dropout":dropout,
-       "validation_fraction":validation_fraction,"split_policy":SPLIT_POLICY,"device":resolved}
+       "validation_fraction":validation_fraction,"split_policy":SPLIT_POLICY,"device":resolved,
+       "corpus_manifest_sha256":corpus_manifest["manifest_sha256"],
+       "corpus_manifest_review_status":corpus_manifest["review_status"],
+       "corpus_license_review_required":corpus_manifest["license_review_required"],
+       "corpus_factual_review_required":corpus_manifest["factual_review_required"],
+       "corpus_pii_review_required":corpus_manifest["pii_review_required"]}
     if resume:
         if not ckpt_path.is_file() or not tok_path.is_file():
             raise FileNotFoundError(
@@ -189,4 +198,5 @@ def train(*,corpus_path:str,output_dir:str,max_steps:int=300,batch_size:int=16,b
     return {"trained":bool(history),"start_step":start_step,"final_step":target-1 if history else start_step-1,
       "steps_run":len(history),"last_loss":last_loss,"validation_loss":last_val,"device":resolved,
       "checkpoint":str(ckpt_path),"tokenizer":str(tok_path),
-      "train_tokens":len(train_data),"validation_tokens":len(val_data),"split_policy":SPLIT_POLICY}
+      "train_tokens":len(train_data),"validation_tokens":len(val_data),"split_policy":SPLIT_POLICY,
+      "corpus_manifest":corpus_manifest}

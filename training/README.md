@@ -47,9 +47,11 @@ original Russian question/answer examples and complete multi-turn dialogues:
 
     python training/build_dialogue_corpus.py
 
-This writes training/data/qq_quantum_dialogue_v2.txt. The examples are project-authored;
-they are a starter curriculum, not a comprehensive or independently fact-checked
-encyclopedia. Review factual examples before expanding or publishing the model.
+This writes training/data/qq_quantum_dialogue_v2.txt. The authored examples are a starter curriculum, not a comprehensive or independently
+fact-checked encyclopedia. The builder writes a source-fingerprinted sidecar manifest.
+The seed-corpus origin is not recorded and the curriculum content license is unassigned;
+both, along with facts and privacy, require review before a checkpoint is promoted or
+publicly distributed.
 
 Train a new checkpoint from scratch (do not resume an older checkpoint when changing
 the corpus, tokenizer size, or split policy):
@@ -93,8 +95,11 @@ Current generated corpus snapshot:
   260/260 authored definition paraphrase probes return the same answer.
 
 The exact counts are reproducible from tracked source files by running
-python training/build_dialogue_corpus.py
-and the retrieval corpus tests. The runtime retrieval index deliberately excludes
+python training/build_dialogue_corpus.py. This also writes
+training/data/qq_quantum_dialogue_v2.manifest.json with source-file hashes, corpus
+hash, split policy, duplicate counts, and explicit pending review flags. Training
+validates the manifest and records its hash and review status in each checkpoint.
+The runtime retrieval index deliberately excludes
 documents beginning with "Диалог "; multi-turn dialogue remains in the SFT data,
 where the full history is included in the prompt.
 

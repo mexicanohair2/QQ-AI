@@ -15,6 +15,7 @@ from .dialogue import build_conversation_prompt
 from .model.tokenizer import ByteBPETokenizer
 from .model.training import SPLIT_POLICY, _atomic_torch_save, _read_corpus, _split_corpus_documents
 from .model.transformer import GPTConfig, QuantumGPT
+from training.corpus_utils import load_corpus_manifest
 
 SFT_CHECKPOINT_FORMAT = "qq-quantum-sft-v1"
 
@@ -236,6 +237,9 @@ def train_sft(
 
     corpus = _read_corpus(corpus_path)
     corpus_sha = hashlib.sha256(corpus.encode("utf-8")).hexdigest()
+    corpus_manifest = load_corpus_manifest(
+        corpus_path, corpus_sha, expected_split_policy=SPLIT_POLICY
+    )
     source_dir = Path(pretrained_dir)
     checkpoint_path = source_dir / "latest.pt"
     tokenizer_path = source_dir / "tokenizer.json"
@@ -280,6 +284,11 @@ def train_sft(
         "validation_fraction": validation_fraction,
         "split_policy": SPLIT_POLICY,
         "corpus_sha256": corpus_sha,
+        "corpus_manifest_sha256": corpus_manifest["manifest_sha256"],
+        "corpus_manifest_review_status": corpus_manifest["review_status"],
+        "corpus_license_review_required": corpus_manifest["license_review_required"],
+        "corpus_factual_review_required": corpus_manifest["factual_review_required"],
+        "corpus_pii_review_required": corpus_manifest["pii_review_required"],
         "pretrained_checkpoint": str(checkpoint_path),
         "train_samples": len(train_samples),
         "validation_samples": len(validation_samples),
@@ -352,4 +361,5 @@ def train_sft(
         "checkpoint": str(latest_path),
         "best_checkpoint": str(best_path),
         "tokenizer": str(tokenizer_out),
+        "corpus_manifest": corpus_manifest,
     }
