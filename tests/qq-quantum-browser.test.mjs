@@ -20,7 +20,7 @@ test("Vite integration produces a local QQ Quantum mode without changing the sou
   assert.match(transformed, /Первый запуск может занять несколько секунд/);
   assert.match(transformed, /workers\/qq-quantum\.worker\.ts/);
   assert.match(transformed, /importQuantumModelHtml/);
-  assert.match(transformed, /void loadOfflineModel\\(\\)/);
+  assert.match(transformed, /void loadOfflineModel\(\)/);
   assert.match(transformed, /первом запуске сайт скачает собственную модель/i);
   assert.match(transformed, /QQ Quantum/);
   assert.doesNotMatch(transformed, /DeepSeek|Qwen2/);
