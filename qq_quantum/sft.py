@@ -13,7 +13,7 @@ from torch.optim import AdamW
 
 from .dialogue import build_conversation_prompt
 from .model.tokenizer import ByteBPETokenizer
-from .model.training import _atomic_torch_save, _read_corpus, _split_corpus_documents
+from .model.training import SPLIT_POLICY, _atomic_torch_save, _read_corpus, _split_corpus_documents
 from .model.transformer import GPTConfig, QuantumGPT
 
 SFT_CHECKPOINT_FORMAT = "qq-quantum-sft-v1"
@@ -80,8 +80,8 @@ def build_sft_samples(
     """Build masked next-token samples; only assistant answer tokens contribute to loss."""
     if block_size < 32:
         raise ValueError("block_size must be at least 32 for the dialogue prompt")
-    if max_answer_tokens < 1:
-        raise ValueError("max_answer_tokens must be positive")
+    if max_answer_tokens < 1 or max_answer_tokens >= block_size:
+        raise ValueError("max_answer_tokens must be positive and smaller than block_size")
 
     train_text, validation_text = _split_corpus_documents(corpus, validation_fraction, seed)
 
@@ -98,7 +98,7 @@ def build_sft_samples(
             for index in range(0, len(turns), 2):
                 user_turn, assistant_turn = turns[index], turns[index + 1]
                 history.append({"role": "user", "content": user_turn["content"]})
-                prompt_budget = max(16, block_size - min(max_answer_tokens, 12))
+                prompt_budget = max(16, block_size - max_answer_tokens)
                 try:
                     prompt_text = build_conversation_prompt(
                         history,
@@ -278,7 +278,7 @@ def train_sft(
         "learning_rate": learning_rate,
         "block_size": model_config.block_size,
         "validation_fraction": validation_fraction,
-        "split_policy": "seeded-random-document-split-v2",
+        "split_policy": SPLIT_POLICY,
         "corpus_sha256": corpus_sha,
         "pretrained_checkpoint": str(checkpoint_path),
         "train_samples": len(train_samples),

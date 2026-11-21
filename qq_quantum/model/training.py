@@ -1,6 +1,6 @@
 """Reproducible CPU/GPU training with validation and exact checkpoint resume."""
 from __future__ import annotations
-import base64, binascii, gzip, hashlib, random, re
+import base64, binascii, gzip, hashlib, random, re, unicodedata
 from pathlib import Path
 import numpy as np
 import torch
@@ -8,7 +8,7 @@ from torch.optim import AdamW
 from .tokenizer import ByteBPETokenizer
 from .transformer import GPTConfig, QuantumGPT
 CHECKPOINT_FORMAT="qq-quantum-checkpoint-v2"
-SPLIT_POLICY="seeded-random-document-split-v2"
+SPLIT_POLICY="seeded-normalized-document-group-split-v3"
 
 
 def completed_training_step(checkpoint: dict) -> int:
@@ -42,20 +42,43 @@ def _atomic_torch_save(payload:dict,path:Path):
     torch.save(payload,tmp);tmp.replace(path)
 
 def _split_corpus_documents(corpus: str, validation_fraction: float, seed: int) -> tuple[str, str]:
-    """Split whole blank-line-delimited documents to prevent dialogue leakage."""
+    """Split documents while keeping normalized exact duplicates in one partition."""
     if not 0 < validation_fraction < 1:
         raise ValueError("Invalid validation fraction")
     documents = [part.strip() for part in re.split(r"\n\s*\n", corpus) if part.strip()]
     if len(documents) < 2:
         raise ValueError("At least two documents are required for a document split")
-    validation_count = max(1, int(round(len(documents) * validation_fraction)))
-    if validation_count >= len(documents):
-        validation_count = len(documents) - 1
-    indices = list(range(len(documents)))
+
+    def duplicate_key(document: str) -> str:
+        normalized = unicodedata.normalize("NFC", document)
+        normalized = " ".join(normalized.split()).casefold()
+        return normalized
+
+    groups: dict[str, list[str]] = {}
+    for document in documents:
+        groups.setdefault(duplicate_key(document), []).append(document)
+    grouped_documents = list(groups.values())
+    if len(grouped_documents) < 2:
+        raise ValueError("At least two unique documents are required for a leakage-safe split")
+
+    validation_target = max(1, int(round(len(documents) * validation_fraction)))
+    indices = list(range(len(grouped_documents)))
     random.Random(seed).shuffle(indices)
-    validation_indices = set(indices[:validation_count])
-    train_documents = [doc for index, doc in enumerate(documents) if index not in validation_indices]
-    validation_documents = [doc for index, doc in enumerate(documents) if index in validation_indices]
+    validation_groups: set[int] = set()
+    validation_count = 0
+    for index in indices[:-1]:
+        if validation_count >= validation_target:
+            break
+        validation_groups.add(index)
+        validation_count += len(grouped_documents[index])
+
+    validation_keys = {
+        key for index, key in enumerate(groups.keys()) if index in validation_groups
+    }
+    train_documents = [doc for doc in documents if duplicate_key(doc) not in validation_keys]
+    validation_documents = [doc for doc in documents if duplicate_key(doc) in validation_keys]
+    if not train_documents or not validation_documents:
+        raise RuntimeError("Document grouping produced an empty corpus partition")
     return "\n\n".join(train_documents), "\n\n".join(validation_documents)
 
 
@@ -98,7 +121,7 @@ def train(*,corpus_path:str,output_dir:str,max_steps:int=300,batch_size:int=16,b
     tok_path,ckpt_path=output/"tokenizer.json",output/"latest.pt"
     requested={"seed":seed,"batch_size":batch_size,"block_size":block_size,"learning_rate":learning_rate,
        "vocab_size":vocab_size,"n_layer":n_layer,"n_head":n_head,"n_embd":n_embd,"dropout":dropout,
-       "validation_fraction":validation_fraction,"split_policy":SPLIT_POLICY}
+       "validation_fraction":validation_fraction,"split_policy":SPLIT_POLICY,"device":resolved}
     if resume:
         if not ckpt_path.is_file() or not tok_path.is_file():
             raise FileNotFoundError(
@@ -111,6 +134,12 @@ def train(*,corpus_path:str,output_dir:str,max_steps:int=300,batch_size:int=16,b
         saved=ckpt.get("training",{})
         if saved.get("split_policy")!=SPLIT_POLICY or saved.get("corpus_sha256")!=corpus_sha:
             raise ValueError("Checkpoint format or corpus mismatch")
+        if saved.get("device", resolved) != resolved:
+            raise ValueError("Cannot resume exact training on a different device")
+        if resolved == "cuda" and not ckpt.get("cuda_rng"):
+            raise ValueError("Checkpoint is missing CUDA RNG state; exact resume is unavailable")
+        if resolved == "mps" and not ckpt.get("mps_rng"):
+            raise ValueError("Checkpoint is missing MPS RNG state; exact resume is unavailable")
         for key,value in requested.items():
             if key in saved and saved[key]!=value: raise ValueError(f"Cannot change {key} when resuming")
         cfg=GPTConfig(**ckpt["model_config"])
@@ -119,6 +148,12 @@ def train(*,corpus_path:str,output_dir:str,max_steps:int=300,batch_size:int=16,b
         optimizer=AdamW(model.parameters(),lr=learning_rate);optimizer.load_state_dict(ckpt["optimizer"])
         start_step=int(ckpt["step"])+1
         random.setstate(ckpt["python_rng"]);np.random.set_state(ckpt["numpy_rng"]);torch.set_rng_state(ckpt["torch_rng"])
+        if resolved == "cuda":
+            if len(ckpt["cuda_rng"]) != torch.cuda.device_count():
+                raise ValueError("CUDA device count differs from the checkpoint; exact resume is unavailable")
+            torch.cuda.set_rng_state_all(ckpt["cuda_rng"])
+        elif resolved == "mps":
+            torch.mps.set_rng_state(ckpt["mps_rng"])
     else:
         random.seed(seed);np.random.seed(seed);torch.manual_seed(seed)
         tokenizer=ByteBPETokenizer(vocab_size).train(train_text,vocab_size=vocab_size);tokenizer.save(tok_path)
@@ -138,6 +173,7 @@ def train(*,corpus_path:str,output_dir:str,max_steps:int=300,batch_size:int=16,b
           "optimizer":optimizer.state_dict(),"loss":loss,"validation_loss":last_val,"python_rng":random.getstate(),
           "numpy_rng":np.random.get_state(),"torch_rng":torch.get_rng_state(),
           "cuda_rng":torch.cuda.get_rng_state_all() if resolved=="cuda" else None,
+          "mps_rng":torch.mps.get_rng_state() if resolved=="mps" else None,
           "training":{**requested,"corpus_path":str(corpus_path),"corpus_sha256":corpus_sha,
             "corpus_characters":len(corpus),"corpus_documents":len([x for x in re.split(r"\n\s*\n", corpus) if x.strip()]),
             "train_tokens":len(train_data),"validation_tokens":len(val_data)}}

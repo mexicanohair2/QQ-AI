@@ -143,6 +143,30 @@ class SupervisedFineTuningTests(unittest.TestCase):
             self.assertLessEqual(len(sample["labels"]), 128)
             self.assertLessEqual(sample["prompt_token_count"], 128)
 
+    def test_requested_answer_budget_is_not_silently_reduced_to_twelve_tokens(self):
+        text = "\\n\\n".join(
+            f"Пользователь: Объясни длинный пример номер {index}.\\n"
+            f"QQ Quantum: Подробный ответ номер {index}: " +
+            " ".join(f"слово{word}" for word in range(90)) + "."
+            for index in range(10)
+        )
+        tokenizer = ByteBPETokenizer(1024).train(text, vocab_size=1024)
+        train_samples, validation_samples = build_sft_samples(
+            text,
+            tokenizer,
+            block_size=128,
+            seed=21,
+            max_answer_tokens=64,
+        )
+        samples = train_samples + validation_samples
+        supervised = [
+            sum(label != -100 for label in sample["labels"])
+            for sample in samples
+        ]
+        self.assertTrue(supervised)
+        self.assertTrue(any(count > 12 for count in supervised))
+        self.assertTrue(all(count <= 65 for count in supervised))
+
     def test_sft_training_writes_loadable_own_model_checkpoint(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
