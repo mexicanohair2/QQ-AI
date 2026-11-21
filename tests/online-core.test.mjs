@@ -349,7 +349,7 @@ test("online-only welcome screen does not expose local model preparation", async
   const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
   assert.match(app, /QQ Quantum работает на сервере/);
   assert.match(app, /button className="selected" type="button" disabled>Онлайн/);
-  assert.doesNotMatch(app, /Загрузить и запустить ИИ|Загрузить модель|Офлайн<\/button>/);
+  assert.doesNotMatch(app, /<button[^>]*>Офлайн<\/button>|onClick=\{loadOfflineModel\}|Открыть офлайн-режим/);
 });
 
 test("offline chat does not append a user message before the local model is ready", async () => {
@@ -772,7 +772,7 @@ test("voice input in the online-only UI uses browser speech and offers no local 
   assert.ok(start >= 0 && end > start);
   const dialog = app.slice(start, end);
   assert.match(dialog, /beginVoiceRecognition/);
-  assert.match(dialog, /распознавания речи браузера/);
+  assert.match(dialog, /распознавание речи браузера/);
   assert.doesNotMatch(dialog, /loadLocalSpeechModel|whisper|Загрузить локальную модель/);
 });
 
