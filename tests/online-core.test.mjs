@@ -888,7 +888,7 @@ test("primary QQ Quantum text chat always uses its own server-side model runtime
   const runtime = await readFile(new URL("../src/lib/qq-quantum-server.ts", import.meta.url), "utf8");
 
   assert.match(chat, /import \{ answerWithQuantum \} from "\.\.\/src\/lib\/qq-quantum-server\.ts"/);
-  assert.match(chat, /needsSearch \? buildSearchOnlyAnswer\(sources\) : await answerWithQuantum\(messages\)/);
+  assert.match(chat, /const answer = needsSearch\s*\? buildSearchOnlyAnswer\(sources\)\s*:\s*await answerWithQuantum\(messages\)/);
   assert.doesNotMatch(chat, /model-gateway|QQ_AI_API_URL|DEEPSEEK_API_KEY|OPENAIAPIKEY|OPENAI_API_KEY|GEMINI_API_KEY|ANTHROPIC_API_KEY/);
 
   assert.match(runtime, /server\/quantum\/model\.json/);
