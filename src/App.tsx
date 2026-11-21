@@ -23,7 +23,7 @@ function Mark({ small = false }: { small?: boolean }) {
 
 export default function App() {
   const [chats, setChats] = useState<Chat[]>(load);
-  const [activeId, setActiveId] = useState(() => load()[0]?.id);
+  const [activeId, setActiveId] = useState<string | undefined>(undefined);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");

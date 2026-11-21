@@ -19,7 +19,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!upstream.ok || !upstream.body) { const detail = await upstream.text().catch(() => ""); console.error("Model provider:", upstream.status, detail.slice(0, 800)); return res.status(502).json({ error: "Сервер модели временно не ответил. Попробуй ещё раз." }); }
     res.status(200); res.setHeader("Content-Type", "text/event-stream; charset=utf-8"); res.setHeader("Cache-Control", "no-cache, no-transform"); res.setHeader("Connection", "keep-alive"); res.setHeader("X-Accel-Buffering", "no");
     const reader = upstream.body.getReader();
-    try { while (true) { const part = await reader.read(); if (part.done) break; res.write(Buffer.from(part.value)); } res.end(); }
+    try { while (true) { const part = await reader.read(); if (part.done) break; res.write(new Uint8Array(part.value)); } res.end(); }
     catch (error) { console.error("Model stream interrupted:", error); if (!res.writableEnded) res.end(); }
   } catch (error) { console.error("Model connection:", error); if (!res.headersSent) return res.status(502).json({ error: "Не удалось связаться с сервером модели." }); if (!res.writableEnded) res.end(); }
 }
