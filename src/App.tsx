@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type TouchEvent as ReactTouchEvent } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type TouchEvent as ReactTouchEvent } from "react";
 const MarkdownMessage = lazy(() => import("./components/MarkdownMessage"));
 import { createClient, type Session } from "@supabase/supabase-js";
 import { calculateMathQuestion } from "./lib/math";
@@ -1501,6 +1501,11 @@ export default function App() {
   void loadLocalVisionModel;
   void loadLocalSpeechModel;
   void startLocalSpeechRecording;
+  void progress;
+  void localVisionProgress;
+  void localVisionStatus;
+  void localSpeechProgress;
+  void localSpeechStatus;
 
   return <main className="shell" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
     {sidebarVisible && <aside className="rail history-sidebar">
