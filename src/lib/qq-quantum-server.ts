@@ -1,12 +1,12 @@
 import "./qq-quantum-browser-runtime.js";
-import modelAssets from "../../server/quantum/model.json";
+import modelAssets from "../../server/quantum/model.json" with { type: "json" };
 import {
   buildQuantumPrompt,
   findQuantumKnowledgeAnswer,
   getQuantumKnownWords,
   indexQuantumKnowledge,
   normalizeQuantumWord,
-} from "./qq-quantum-dialogue";
+} from "./qq-quantum-dialogue.ts";
 
 type BrowserApi = {
   ByteBPETokenizer: new (payload: unknown) => {

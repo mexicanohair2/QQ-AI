@@ -2,21 +2,23 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("online route accepts only the independent QQ Quantum model service", async () => {
+test("online route uses the bundled self-hosted QQ Quantum runtime", async () => {
   const source = await readFile(new URL("../api/chat.ts", import.meta.url), "utf8");
-  assert.match(source, /QQ_QUANTUM_ONLINE_URL/);
-  assert.match(source, /QQ_QUANTUM_ONLINE_TOKEN/);
-  assert.match(source, /QQ_QUANTUM_ONLINE_UNAVAILABLE/);
-  assert.match(source, /safeModelEndpoint/);
-  assert.doesNotMatch(source, /QQ_AI_API_URL|QQ_AI_MODEL|DEEPSEEK_API_KEY|OPENAIAPIKEY/);
+  const runtime = await readFile(new URL("../src/lib/qq-quantum-server.ts", import.meta.url), "utf8");
+  assert.match(source, /answerWithQuantum/);
+  assert.match(source, /buildSearchOnlyAnswer/);
+  assert.doesNotMatch(source, /QQ_QUANTUM_ONLINE_URL|QQ_QUANTUM_ONLINE_TOKEN|safeModelEndpoint|DEEPSEEK_API_KEY/);
   assert.ok(source.includes("readRequestTextLimited(request, 520_000)"));
+  assert.match(runtime, /server\/quantum\/model\.json/);
+  assert.match(runtime, /findQuantumKnowledgeAnswer/);
 });
 
-test("web search is a separate real endpoint and is treated as untrusted evidence", async () => {
+test("web search is a separate endpoint and is never misrepresented as model synthesis", async () => {
   const chat = await readFile(new URL("../api/chat.ts", import.meta.url), "utf8");
   const search = await readFile(new URL("../api/search.ts", import.meta.url), "utf8");
   assert.match(chat, /shouldSearchWeb/);
-  assert.match(chat, /buildSearchContext/);
+  assert.match(chat, /buildSearchOnlyAnswer/);
+  assert.doesNotMatch(chat, /buildSearchContext/);
   assert.match(search, /html\.duckduckgo\.com/);
   assert.match(search, /synthesizedByModel: false/);
   assert.match(search, /readRequestTextLimited\(request, 2_000\)/);
@@ -165,22 +167,23 @@ test("OpenAI stream reader rejects empty and oversized responses", async () => {
 });
 
 
-test("chat gateway keeps its upstream timeout active for the lifetime of the response stream", async () => {
+test("chat gateway streams the completed local-model response and clears its timeout", async () => {
   const source = await readFile(new URL("../api/chat.ts", import.meta.url), "utf8");
-  assert.match(source, /let streamingResponse = false/);
   assert.match(source, /const responseBody = new ReadableStream/);
-  assert.match(source, /streamController\.close\(\);[\s\S]*?clearTimeout\(timeout\)/);
-  assert.match(source, /async cancel\(reason\)/);
-  assert.match(source, /if \(!streamingResponse\) clearTimeout\(timeout\)/);
+  assert.match(source, /streamController\.close\(\)/);
+  assert.match(source, /clearTimeout\(timeout\)/);
+  assert.doesNotMatch(source, /let streamingResponse = false/);
+  assert.doesNotMatch(source, /const upstream = await fetch/);
 });
 
 
-test("welcome screen keeps online selected and never switches to offline automatically", async () => {
+test("welcome screen exposes only online mode and does not ask users to download weights", async () => {
   const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
-  assert.match(app, /Онлайн-режим выбран, но модель не подключена/);
-  assert.match(app, /Офлайн-режим автоматически не включается/);
-  assert.match(app, /setMode\("offline"\)/);
-  assert.match(app, /Онлайн-модель QQ AI не настроена на сервере/);
+  assert.match(app, /button className="selected" type="button" disabled>Онлайн/);
+  assert.match(app, /QQ Quantum работает на сервере/);
+  assert.doesNotMatch(app, /<button[^>]*>Офлайн<\/button>/);
+  assert.doesNotMatch(app, /setMode\("offline"\)/);
+  assert.doesNotMatch(app, /Открыть офлайн-режим/);
 });
 
 
@@ -258,13 +261,11 @@ test("chat, search and vision routes no longer buffer request.text before enforc
 });
 
 
-test("chat gateway never relays unbounded or provider-internal error bodies to the browser", async () => {
+test("chat gateway has no third-party provider error body to relay", async () => {
   const source = await readFile(new URL("../api/chat.ts", import.meta.url), "utf8");
-  const errorBranch = source.slice(source.indexOf("if (!upstream.ok)"), source.indexOf("if (!upstream.body)"));
-  assert.match(errorBranch, /upstream\.body\?\.cancel\(\)/);
-  assert.match(errorBranch, /MODEL_UPSTREAM_ERROR/);
-  assert.doesNotMatch(errorBranch, /upstream\.text\(\)|readResponseTextLimited/);
-  assert.doesNotMatch(errorBranch, /detail|Authorization|apiKey|token/i);
+  assert.match(source, /answerWithQuantum/);
+  assert.match(source, /Не удалось выполнить запрос к собственной модели QQ Quantum/);
+  assert.doesNotMatch(source, /MODEL_UPSTREAM_ERROR|upstream\.text\(\)|Authorization|DEEPSEEK_API_KEY/);
 });
 
 
@@ -344,11 +345,11 @@ test("offline model branding is hidden from the interface and voice input uses a
 });
 
 
-test("offline-first welcome screen offers one clear action to prepare the local AI", async () => {
+test("online-only welcome screen does not expose local model preparation", async () => {
   const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
-  assert.match(app, /Загрузить и запустить ИИ/);
-  assert.match(app, /Локальная модель ещё не загружена/);
-  assert.match(app, /для актуальных тем искать источники в интернете/);
+  assert.match(app, /QQ Quantum работает на сервере/);
+  assert.match(app, /button className="selected" type="button" disabled>Онлайн/);
+  assert.doesNotMatch(app, /Загрузить и запустить ИИ|Загрузить модель|Офлайн<\/button>/);
 });
 
 test("offline chat does not append a user message before the local model is ready", async () => {
@@ -383,19 +384,11 @@ test("assistant answers can be read aloud locally and speech playback can be sto
   assert.match(styles, /\.feedback \.speak-button/);
 });
 
-test("online mode requires an explicit switch before using the local model", async () => {
+test("online mode has no user-facing switch to local model", async () => {
   const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
-  const start = app.indexOf("async function send()");
-  const end = app.indexOf("async function signIn()", start);
-  assert.ok(start >= 0 && end > start, "send handler should exist");
-  const handler = app.slice(start, end);
-  assert.match(handler, /mode === "online" && onlineModelReady === false/);
-  assert.match(handler, /Офлайн-режим автоматически не включается/);
-  const onlineStart = handler.indexOf('else if (mode === "online")');
-  const offlineStart = handler.indexOf('} else await sendOffline(next);', onlineStart);
-  assert.ok(onlineStart >= 0 && offlineStart > onlineStart);
-  assert.doesNotMatch(handler.slice(onlineStart, offlineStart), /sendOffline|setMode\("offline"\)/);
-  assert.match(app, /mode === "online" && <button className="secondary-button"/);
+  assert.match(app, /const modeLabel = "Онлайн"/);
+  assert.match(app, /button className="selected" type="button" disabled>Онлайн/);
+  assert.doesNotMatch(app, /setMode\("offline"\)|Открыть офлайн-режим|onClick=\{loadOfflineModel\}/);
 });
 
 
@@ -772,26 +765,15 @@ test("local Whisper audio conversion rejects invalid sample rates and recordings
   assert.throws(() => resampleTo16kMono([new Float32Array(10), new Float32Array(9)], 16_000), /несовместимый формат/);
 });
 
-test("local speech recording is browser-only, bounded and editable before sending", async () => {
+test("voice input in the online-only UI uses browser speech and offers no local model download", async () => {
   const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
-  const worker = await readFile(new URL("../src/workers/local-speech.worker.ts", import.meta.url), "utf8");
-  const audio = await readFile(new URL("../src/lib/local-audio.ts", import.meta.url), "utf8");
-
-  assert.match(app, /navigator\.mediaDevices\.getUserMedia/);
-  assert.match(app, /new MediaRecorder/);
-  assert.match(app, /MAX_LOCAL_SPEECH_SECONDS \* 1000/);
-  assert.match(app, /decodeAndTranscribeLocalAudio\(blob\)/);
-  assert.match(app, /setDraft\(current => appendTranscript\(current, transcript\)\)/);
-  assert.match(app, /Загрузить локальную модель · ~70–90 МБ/);
-  assert.match(worker, /onnx-community\/whisper-tiny/);
-  assert.match(worker, /device: "webgpu"/);
-  assert.match(worker, /dtype: "q8"/);
-  assert.match(worker, /language: "russian"/);
-  assert.match(worker, /task: "transcribe"/);
-  assert.match(worker, /MAX_SAMPLES = 16_000 \* 20/);
-  assert.match(worker, /samples\.fill\(0\)/);
-  assert.match(audio, /SPEECH_SAMPLE_RATE = 16_000/);
-  assert.doesNotMatch(worker, /fetch\(/);
+  const start = app.indexOf("{voiceNoticeOpen &&");
+  const end = app.indexOf("{authOpen &&", start);
+  assert.ok(start >= 0 && end > start);
+  const dialog = app.slice(start, end);
+  assert.match(dialog, /beginVoiceRecognition/);
+  assert.match(dialog, /распознавания речи браузера/);
+  assert.doesNotMatch(dialog, /loadLocalSpeechModel|whisper|Загрузить локальную модель/);
 });
 
 test("local GPU runtime selection keeps at most one heavyweight model active", async () => {
@@ -810,19 +792,16 @@ test("local GPU runtime selection keeps at most one heavyweight model active", a
   assert.match(app, /await prepareLocalRuntime\("speech"\)/);
 });
 
-test("online mode never silently falls back to the offline Qwen model", async () => {
+test("online chat never silently falls back to a local or third-party model", async () => {
   const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
   const start = app.indexOf("async function send()");
   const end = app.indexOf("async function signIn()", start);
-  assert.ok(start >= 0 && end > start, "send handler should exist");
+  assert.ok(start >= 0 && end > start);
   const handler = app.slice(start, end);
-  const onlineStart = handler.indexOf('else if (mode === "online")');
-  const offlineStart = handler.indexOf('} else await sendOffline(next);', onlineStart);
-  assert.ok(onlineStart >= 0 && offlineStart > onlineStart, "online and offline routes should be distinct");
-  const onlineBranch = handler.slice(onlineStart, offlineStart);
-  assert.doesNotMatch(onlineBranch, /sendOffline|setMode\("offline"\)/);
-  assert.match(handler, /Офлайн-режим автоматически не включается/);
-  assert.match(app, /mode === "online" && <button className="secondary-button"/);
+  assert.match(handler, /else if \(mode === "online"\)/);
+  assert.doesNotMatch(handler, /setMode\("offline"\)/);
+  assert.match(app, /button className="selected" type="button" disabled>Онлайн/);
+  assert.doesNotMatch(app, /Открыть офлайн-режим/);
 });
 
 test("local model operations have bounded timeouts and worker crashes reset stale worker references", async () => {
@@ -885,15 +864,15 @@ test("non-OpenAI compatible gateways keep their existing request format", async 
   assert.equal("max_completion_tokens" in payload, false);
 });
 
-test("QQ Quantum chat does not accept external LLM keys; separate Vision may use its own key", async () => {
+test("QQ Quantum chat uses its own bundled model; Vision credentials remain separate", async () => {
   const chat = await readFile(new URL("../api/chat.ts", import.meta.url), "utf8");
   const vision = await readFile(new URL("../api/vision.ts", import.meta.url), "utf8");
   const capabilities = await readFile(new URL("../api/capabilities.ts", import.meta.url), "utf8");
-  assert.ok(!/OPENAIAPIKEY|OPENAI_API_KEY|DEEPSEEK_API_KEY|VITE_OPENAIAPIKEY/.test(chat));
-  assert.ok(chat.includes("QQ_QUANTUM_ONLINE_URL"));
+  assert.match(chat, /answerWithQuantum/);
+  assert.doesNotMatch(chat, /QQ_QUANTUM_ONLINE_URL|QQ_QUANTUM_ONLINE_TOKEN|OPENAIAPIKEY|OPENAI_API_KEY|DEEPSEEK_API_KEY/);
   assert.ok(vision.includes("process.env.OPENAIAPIKEY"));
   assert.ok(capabilities.includes("process.env.OPENAIAPIKEY"));
-  assert.ok(!/console\\.(?:log|info|warn|error).*apiKey/.test(chat));
+  assert.ok(!/console\.(?:log|info|warn|error).*apiKey/.test(chat));
 });
 
 
