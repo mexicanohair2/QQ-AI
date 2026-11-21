@@ -97,8 +97,8 @@
       "kind": "builder_code",
       "provenance": "project_code",
       "license_status": "unassigned",
-      "bytes": 6291,
-      "sha256": "f71833657c97a2a7830750b2efdaeec45d8e760217e9ddf4daad3351d7e3e3c3"
+      "bytes": 6851,
+      "sha256": "f467e6be144641079c9d8aee18c05208b017513c8144b1e045d25a056b8e4fb6"
     },
     {
       "path": "training/corpus_utils.py",
@@ -113,8 +113,56 @@
       "kind": "training_policy_code",
       "provenance": "project_code",
       "license_status": "unassigned",
-      "bytes": 11880,
-      "sha256": "6b994235305375857f1806112f3ee8f7ef553553b38ff6ac3d34b210f49feb4c"
+      "bytes": 12274,
+      "sha256": "025c269a755ead4021acc492de406effd453bc0c1c56f4db06cfd2d9c32bebef"
+    },
+    {
+      "path": "qq_quantum/sft.py",
+      "kind": "training_policy_code",
+      "provenance": "project_code",
+      "license_status": "unassigned",
+      "bytes": 16396,
+      "sha256": "548af4a29e1164667e05eb44368d052e9fd752a2ea994610c5e4a6bf003abb50"
+    },
+    {
+      "path": "qq_quantum/model/tokenizer.py",
+      "kind": "tokenizer_code",
+      "provenance": "project_code",
+      "license_status": "unassigned",
+      "bytes": 7031,
+      "sha256": "047b11684ec40a9c8fd6833bab8f538cd74050eca3904485957604a5497baa5c"
+    },
+    {
+      "path": "qq_quantum/model/transformer.py",
+      "kind": "architecture_code",
+      "provenance": "project_code",
+      "license_status": "unassigned",
+      "bytes": 4552,
+      "sha256": "a15fd74e8d93a3b118d2c61f8a089b9c7aa5d424d1c6667f703d7c55c204be0c"
+    },
+    {
+      "path": "qq_quantum/dialogue.py",
+      "kind": "prompt_policy_code",
+      "provenance": "project_code",
+      "license_status": "unassigned",
+      "bytes": 2940,
+      "sha256": "913ac62994481c21f4d17c55240c8eeae42e7c1462e1689e3ec8c70f56ebae58"
+    },
+    {
+      "path": "scripts/train_qq_quantum.py",
+      "kind": "training_cli_code",
+      "provenance": "project_code",
+      "license_status": "unassigned",
+      "bytes": 2233,
+      "sha256": "3e1aedf4680f5a2e90a53ebc7c1e11980e7c7543edeb2c99163214e638630555"
+    },
+    {
+      "path": "scripts/finetune_qq_quantum.py",
+      "kind": "sft_cli_code",
+      "provenance": "project_code",
+      "license_status": "unassigned",
+      "bytes": 1974,
+      "sha256": "b40c5f19aa53591e88d149166f624c3a6801e618eddf747542c60785fa7a9a19"
     }
   ]
 }
