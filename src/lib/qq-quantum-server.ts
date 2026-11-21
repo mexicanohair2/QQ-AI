@@ -90,6 +90,11 @@ export async function answerWithQuantum(messages: QuantumMessage[]): Promise<str
   return "Я пока не могу надёжно сформулировать ответ на этот вопрос. Свободная генерация QQ Quantum ещё обучается; я не буду выдавать случайный текст за достоверный ответ или подменять собственную модель сторонним ИИ.";
 }
 
+export async function ensureQuantumReady() {
+  await getRuntime();
+  return getQuantumModelStatus();
+}
+
 export function getQuantumModelStatus() {
   return {
     state: "configured" as const,

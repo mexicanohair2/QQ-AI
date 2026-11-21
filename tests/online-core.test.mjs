@@ -1009,3 +1009,10 @@ test("QQ Quantum browser Transformer matches Python logits using the same export
     Math.random = originalRandom;
   }
 });
+
+test("status endpoint loads and verifies the bundled model instead of reporting configuration only", async () => {
+  const source = await readFile(new URL("../api/status.ts", import.meta.url), "utf8");
+  assert.match(source, /ensureQuantumReady/);
+  assert.match(source, /status: "ok"/);
+  assert.match(source, /status: 503/);
+});
