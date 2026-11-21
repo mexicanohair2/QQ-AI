@@ -1,1 +1,4 @@
-export { config, default } from "./capabilities";
+import handler from "./capabilities";
+
+export const config = { runtime: "edge" };
+export default handler;

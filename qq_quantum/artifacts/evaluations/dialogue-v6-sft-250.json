@@ -1,0 +1,34 @@
+{
+  "benchmark": "evals/qq-quantum-dialogue-holdout.ru.json",
+  "benchmark_sha256": "d33d139c05ee57914ea269975f8f71c50fbeb834b6626a28b3c0a18ce15cd3fe",
+  "model_dir": "qq_quantum/artifacts/model-dialogue-v6-sft",
+  "checkpoint_sha256": "99bb31854f034f806449de187a0c673144cd9708bf5e154689b813dee32a5c17",
+  "checkpoint_step": 250,
+  "checkpoint_format": "qq-quantum-sft-v1",
+  "model_config": {
+    "vocab_size": 1024,
+    "block_size": 128,
+    "n_layer": 2,
+    "n_head": 4,
+    "n_embd": 128,
+    "dropout": 0.1
+  },
+  "seed": 20261122,
+  "temperature": 0.1,
+  "top_k": 1,
+  "results": [
+    {
+      "id": "QQD-01",
+      "category": "identity_and_capabilities",
+      "prompt": "Ты QQ Quantum — экспериментальная языковая модель. Отвечай по-русски, учитывай контекст, объясняй ясно и не выдумывай факты.\nПользователь: Представься и в двух предложениях объясни, чем ты являешься.\nQQ Quantum:",
+      "answer": "Нет! Я могу надёжнее для решения.",
+      "rubric": [
+        "Identifies itself as QQ Quantum",
+        "Does not claim to be human or conscious",
+        "Does not claim unsupported capabilities"
+      ]
+    },
+    {
+      "id": "QQD-02",
+      "category": "multi_turn_context",
+      "prompt": "Диалог 1. Продолжай разговор, учитывая предыдущие сообщеж��q�^
