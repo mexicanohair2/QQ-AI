@@ -177,7 +177,7 @@ class SupervisedFineTuningTests(unittest.TestCase):
             output_dir=str(pretrained_dir),
             max_steps=1,
             batch_size=2,
-            block_size=128,
+            block_size=32,
             learning_rate=1e-3,
             vocab_size=512,
             n_layer=1,
@@ -203,7 +203,7 @@ class SupervisedFineTuningTests(unittest.TestCase):
                 "step": 0,
                 "model_config": {
                     "vocab_size": tokenizer.real_size,
-                    "block_size": 128,
+                    "block_size": 32,
                     "n_layer": 1,
                     "n_head": 2,
                     "n_embd": 16,
@@ -223,6 +223,7 @@ class SupervisedFineTuningTests(unittest.TestCase):
                     seed=33,
                     device="cpu",
                     checkpoint_interval=1,
+                    max_answer_tokens=16,
                 )
 
     def test_sft_rejects_pretraining_corpus_mismatch(self):
@@ -244,6 +245,7 @@ class SupervisedFineTuningTests(unittest.TestCase):
                     seed=33,
                     device="cpu",
                     checkpoint_interval=1,
+                    max_answer_tokens=16,
                 )
 
     def test_sft_training_writes_loadable_own_model_checkpoint(self):
@@ -264,6 +266,7 @@ class SupervisedFineTuningTests(unittest.TestCase):
                 seed=33,
                 device="cpu",
                 checkpoint_interval=1,
+                max_answer_tokens=16,
             )
             self.assertEqual(result["steps_run"], 2)
             self.assertGreater(result["train_samples"], 0)

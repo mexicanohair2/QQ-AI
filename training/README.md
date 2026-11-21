@@ -182,3 +182,6 @@ The cleaned corpus and retrieval index improve factual lookup, but they do not m
 the model's unrestricted generation production-ready. The API retains its
 fail-closed quality gate. No public deployment, QQCross integration, or production
 promotion has been performed.
+
+
+SFT compatibility rule: SFT accepts only a QQ Quantum pretraining checkpoint from the current pipeline whose corpus SHA-256, corpus-manifest SHA-256, split policy, seed, validation fraction and tokenizer SHA-256 all match the requested SFT run. This prevents training/validation leakage and accidental reuse of an unrelated vocabulary. The SFT checkpoint records the hashes of its source checkpoint and tokenizer.

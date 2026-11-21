@@ -263,6 +263,12 @@ def train_sft(
         "validation_fraction": validation_fraction,
         "tokenizer_sha256": tokenizer_sha256,
     }
+    missing_metadata = [key for key in required_pretraining if key not in pretraining]
+    if missing_metadata:
+        raise ValueError(
+            "Pretraining checkpoint is missing corpus and tokenizer provenance metadata: "
+            + ", ".join(missing_metadata)
+        )
     for key, expected in required_pretraining.items():
         if key not in pretraining or pretraining[key] != expected:
             raise ValueError(
