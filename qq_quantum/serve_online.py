@@ -10,9 +10,12 @@ from qq_quantum.dialogue import build_conversation_prompt
 from qq_quantum.retrieval import find_answer, load_qa, normalize_word, terms
 
 ROOT = Path(__file__).resolve().parent
-MODEL_DIR = Path(os.environ.get("QQ_QUANTUM_MODEL_DIR", str(ROOT / "artifacts" / "model-online-v1"))).resolve()
-CORPUS_PATH = Path(os.environ.get("QQ_QUANTUM_CORPUS_PATH", str(ROOT / "data" / "seed_corpus.txt.gz.b64"))).resolve()
+MODEL_DIR = Path(os.environ.get("QQ_QUANTUM_MODEL_DIR", str(ROOT / "artifacts" / "model-dialogue-v4-sft-refine-best"))).resolve()
+CORPUS_PATH = Path(os.environ.get("QQ_QUANTUM_CORPUS_PATH", str(ROOT.parent / "training" / "data" / "qq_quantum_dialogue_v2.txt"))).resolve()
 TOKEN = os.environ.get("QQ_QUANTUM_TOKEN", "")
+HOST = os.environ.get("HOST", "0.0.0.0")
+PORT = int(os.environ.get("PORT", "8000"))
+TORCH_THREADS = max(1, int(os.environ.get("QQ_QUANTUM_TORCH_THREADS", "1")))
 MAX_BODY = 520_000
 WORD_RE = re.compile(r"[а-яёa-z0-9]+", re.I)
 
@@ -176,7 +179,16 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(payload)
 
 if __name__ == "__main__":
-    if not TOKEN:
-        raise SystemExit("QQ_QUANTUM_TOKEN is required")
-    print("QQ Quantum API loaded:", {"step": completed_training_step(CHECKPOINT), "qa": len(QA), "device": "cpu"}, flush=True)
-    ThreadingHTTPServer(("0.0.0.0", 8000), Handler).serve_forever()
+    if len(TOKEN.encode("utf-8")) < 32:
+        raise SystemExit("QQ_QUANTUM_TOKEN must contain at least 32 bytes")
+    torch.set_num_threads(TORCH_THREADS)
+    server = ThreadingHTTPServer((HOST, PORT), Handler)
+    server.daemon_threads = True
+    server.request_queue_size = 32
+    print("QQ Quantum API loaded:", {"step": completed_training_step(CHECKPOINT), "qa": len(QA), "device": "cpu", "host": HOST, "port": PORT, "torch_threads": TORCH_THREADS}, flush=True)
+    try:
+        server.serve_forever(poll_interval=0.5)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
