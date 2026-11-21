@@ -74,7 +74,7 @@ function rejectCrossOrigin(request: Request): Response | null {
   } catch { return json({ error: "Некорректный источник запроса." }, 403); }
 }
 
-export default async function handler(request: Request): Promise<Response> {
+export async function POST(request: Request): Promise<Response> {
   if (request.method !== "POST") return json({ error: "Метод не поддерживается." }, 405);
   const originError = rejectCrossOrigin(request);
   if (originError) return originError;

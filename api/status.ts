@@ -1,6 +1,6 @@
 import { ensureQuantumReady } from "../src/lib/qq-quantum-server.ts";
 
-export default async function handler(request: Request): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
   if (request.method !== "GET") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,

@@ -243,24 +243,28 @@ export default function App() {
 
   useEffect(() => {
     let alive = true;
-    fetch("/api/capabilities").then(async response => {
-      if (!response.ok) throw new Error("Статус QQ AI недоступен");
+    const modelCheck = fetch("/api/status").then(async response => {
+      const data = await response.json();
+      return { ready: response.ok && data.status === "ok" && data.state === "configured" };
+    });
+    const capabilitiesCheck = fetch("/api/capabilities").then(async response => {
+      if (!response.ok) throw new Error("Статус дополнительных модулей QQ AI недоступен");
       return response.json();
-    }).then(data => {
+    });
+    Promise.all([modelCheck, capabilitiesCheck]).then(([model, capabilities]) => {
       if (!alive) return;
-      setOnlineModelReady(data.onlineText?.state === "configured");
-      setVisionReady(data.imageUnderstanding?.state === "configured");
+      setOnlineModelReady(model.ready);
+      setVisionReady(capabilities.imageUnderstanding?.state === "configured");
       setCapabilitiesUnavailable(false);
-      setStatus(data.onlineText?.state === "configured"
-        ? "Онлайн-модель подключена"
-        : "Онлайн-модель не настроена на сервере");
+      setStatus(model.ready
+        ? "Собственная QQ Quantum подключена и готова"
+        : "Серверная модель QQ Quantum временно недоступна");
     }).catch(() => {
-      if (alive) {
-        setOnlineModelReady(null);
-        setVisionReady(null);
-        setCapabilitiesUnavailable(true);
-        setStatus("Не удалось проверить подключение к онлайн-модели");
-      }
+      if (!alive) return;
+      setOnlineModelReady(null);
+      setVisionReady(null);
+      setCapabilitiesUnavailable(true);
+      setStatus("Не удалось проверить подключение к серверной модели QQ Quantum");
     });
     return () => { alive = false; };
   }, []);
@@ -1554,7 +1558,7 @@ export default function App() {
             <button onClick={() => setDraft("Помоги написать или улучшить текст.")}><span>✎</span><b>Работа с текстом</b><small>Написание и редактура</small></button>
           </div>
           
-          <div className="welcome-foot"><span className="status-pulse" />{mode === "online" ? capabilitiesUnavailable ? "Не удалось проверить статус моделей" : onlineModelReady === true ? "QQ AI Online · модель сервера подключена" : onlineModelReady === false ? "QQ AI Online · модель ещё не размещена; поиск доступен отдельно" : "Проверяем онлайн-модель…" : offlineReady ? "Локальная модель готова" : "Локальная модель ещё не загружена"}</div>
+          <div className="welcome-foot"><span className="status-pulse" />{onlineModelReady === true ? "QQ AI Online · серверная модель готова" : onlineModelReady === false ? "QQ AI Online · модель временно недоступна" : capabilitiesUnavailable ? "Не удалось проверить состояние серверной модели" : "Проверяем серверную модель…"}</div>
         </div> : <div className="conversation">
           {messages.map((m, i) => <article className={`message ${m.role}`} key={i}>
             <div className="message-avatar">{m.role === "assistant" ? <span>QQ</span> : "Вы"}</div>

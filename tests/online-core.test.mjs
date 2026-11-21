@@ -511,7 +511,7 @@ test("search route rejects a cross-origin request without contacting providers",
 });
 
 test("chat route rejects a cross-origin request even when Host is absent", async () => {
-  const { default: chatHandler } = await import("../api/chat.ts");
+  const { POST: chatHandler } = await import("../api/chat.ts");
   const originalFetch = globalThis.fetch;
   let fetchCalled = false;
   globalThis.fetch = async () => { fetchCalled = true; throw new Error("should not be called"); };
@@ -1010,9 +1010,15 @@ test("QQ Quantum browser Transformer matches Python logits using the same export
   }
 });
 
-test("status endpoint loads and verifies the bundled model instead of reporting configuration only", async () => {
+test("status endpoint loads and verifies the bundled model through the named GET handler", async () => {
   const source = await readFile(new URL("../api/status.ts", import.meta.url), "utf8");
+  assert.match(source, /export async function GET\\(request: Request\\)/);
   assert.match(source, /ensureQuantumReady/);
-  assert.match(source, /status: "ok"/);
-  assert.match(source, /status: 503/);
+  const { GET: statusHandler } = await import("../api/status.ts");
+  const response = await statusHandler(new Request("https://qq-ai.test/api/status"));
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.status, "ok");
+  assert.equal(body.state, "configured");
+  assert.equal(body.model, "QQ Quantum Online");
 });
