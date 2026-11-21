@@ -49,6 +49,7 @@ jobs:
           assert result["source_count"] >= 10
           print(result)
           PY
+          git ls-files --error-unmatch training/data/qq_quantum_dialogue_v2.manifest.json
           git diff --exit-code -- training/data/qq_quantum_dialogue_v2.manifest.json
       - name: Run QQ Quantum model and training tests
         run: python -m unittest discover -s tests -p "test_*.py"

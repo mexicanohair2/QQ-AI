@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "manifest_type": "qq-quantum-training-corpus",
+  "corpus": {
+    "path": "training/data/qq_quantum_dialogue_v2.txt",
+    "sha256": "aefa07998cc39bd5d63f39e1957a2c517a41deb9f1e9fc5c2acc3a5c68d8161f",
+    "characters": 104431,
+    "words": 13880,
+    "documents": 314
+  },
+  "split": {
+    "policy": "seeded-normalized-document-group-split-v3",
+    "validation_fraction_default": 0.1,
+    "split_is_generated_at_training_time": true,
+    "tokenizer_is_trained_on_training_partition_only": true
+  },
+  "deduplication": {
+    "standalone_documents_before": 273,
+    "standalone_documents_after": 249,
+    "duplicate_standalone_documents_removed": 24,
+    "unique_standalone_prompts": 249
+  },
+  "review": {
+    "status": "pending",
+    "license_review_required": true,
+    "factual_review_required": true,
+    "pii_review_required": true,
+    "notes": "Seed-corpus origin is not recorded in the repository. Curriculum source files do not declare an assigned content license. Do not promote or publicly distribute a trained checkpoint until source, license, factuality, and privacy reviews are completed."
+  },
+  "sources": [
+    {
+      "path": "qq_quantum/data/seed_corpus.txt.gz.b64",
+      "kind": "seed_corpus",
+      "provenance": "origin_not_recorded_in_repository",
+      "license_status": "unverified",
+      "bytes": 12812,
+      "sha256": "972fc42b7bfefa9151431bb2ee68d83ba5ba091f8c7576f390ffe5d413f62cf8"
+    },
+    {
+      "path": "training/dialogue_pairs.py",
+      "kind": "authored_qa",
+      "provenance": "project_authored_origin_to_be_reviewed",
+      "license_status": "unassigned",
+      "bytes": 11219,
+      "sha256": "20d7a6ce73da567ba2451fd6abcf802181ccf16f28cb21bfeba2f1508f2a9f60"
+    },
+    {
+      "path": "training/dialogue_pairs_base_extra.py",
+      "kind": "authored_qa",
+      "provenance": "project_authored_origin_to_be_reviewed",
+      "license_status": "unassigned",
+      "bytes": 10919,
+      "sha256": "d32ee2d712a51b1f6aa71f862efd6cb71eeab2c80a8371b0582d5437b7acb23f"
+    },
+    {
+      "path": "training/dialogue_pairs_extra.py",
+      "kind": "authored_qa",
+      "provenance": "project_authored_origin_to_be_reviewed",
+      "license_status": "unassigned",
+      "bytes": 19410,
+      "sha256": "de656fe333480137c272f60976ffcfd427f3d0b27e10ed6305e74985c07622a6"
+    },
+    {
+      "path": "training/dialogue_pairs_extra_two.py",
+      "kind": "authored_qa",
+      "provenance": "project_authored_origin_to_be_reviewed",
+      "license_status": "unassigned",
+      "bytes": 19366,
+      "sha256": "02c76c49af1df377dff4981b38f7c77ad81e723a8907ffd0c43fc2b1df715f0c"
+    },
+    {
+      "path": "training/dialogue_pairs_science.py",
+      "kind": "authored_qa",
+      "provenance": "project_authored_origin_to_be_reviewed",
+      "license_status": "unassigned",
+      "bytes": 2222,
+      "sha256": "39636427f1ad19446c2c018c8adfa934a8ff50269011b346cea0e4210a69020e"
+    },
+    {
+      "path": "training/dialogues.py",
+      "kind": "authored_dialogue",
+      "provenance": "project_authored_origin_to_be_reviewed",
+      "license_status": "unassigned",
+      "bytes": 8434,
+      "sha256": "73642bf420f918f8ebd27b852c93759e43be300aa93a65aa659834e19c3ef5fd"
+    },
+    {
+      "path": "training/dialogues_extra.py",
+      "kind": "authored_dialogue",
+      "provenance": "project_authored_origin_to_be_reviewed",
+      "license_status": "unassigned",
+      "bytes": 17582,
+      "sha256": "424e57e3999b45defc6b59c08d5ef8b122530bfd589ea6ff0e5b4ff4a82e3aba"
+    },
+    {
+      "path": "training/build_dialogue_corpus.py",
+      "kind": "builder_code",
+      "provenance": "project_code",
+      "license_status": "unassigned",
+      "bytes": 6291,
+      "sha256": "f71833657c97a2a7830750b2efdaeec45d8e760217e9ddf4daad3351d7e3e3c3"
+    },
+    {
+      "path": "training/corpus_utils.py",
+      "kind": "builder_code",
+      "provenance": "project_code",
+      "license_status": "unassigned",
+      "bytes": 7175,
+      "sha256": "5dc8fbefbc32658167a09fbd8aef15fda1468bd0526993cc0402f4be37ef0d6b"
+    },
+    {
+      "path": "qq_quantum/model/training.py",
+      "kind": "training_policy_code",
+      "provenance": "project_code",
+      "license_status": "unassigned",
+      "bytes": 11880,
+      "sha256": "6b994235305375857f1806112f3ee8f7ef553553b38ff6ac3d34b210f49feb4c"
+    }
+  ]
+}
