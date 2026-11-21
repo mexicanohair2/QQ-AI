@@ -82,6 +82,12 @@ source_specs = [
     (ROOT / "training/build_dialogue_corpus.py", "builder_code", "project_code", "unassigned"),
     (ROOT / "training/corpus_utils.py", "builder_code", "project_code", "unassigned"),
     (ROOT / "qq_quantum/model/training.py", "training_policy_code", "project_code", "unassigned"),
+    (ROOT / "qq_quantum/sft.py", "training_policy_code", "project_code", "unassigned"),
+    (ROOT / "qq_quantum/model/tokenizer.py", "tokenizer_code", "project_code", "unassigned"),
+    (ROOT / "qq_quantum/model/transformer.py", "architecture_code", "project_code", "unassigned"),
+    (ROOT / "qq_quantum/dialogue.py", "prompt_policy_code", "project_code", "unassigned"),
+    (ROOT / "scripts/train_qq_quantum.py", "training_cli_code", "project_code", "unassigned"),
+    (ROOT / "scripts/finetune_qq_quantum.py", "sft_cli_code", "project_code", "unassigned"),
 ]
 source_entries = []
 for path, kind, provenance, license_status in source_specs:
