@@ -1,0 +1,129 @@
+{
+  "schemaVersion": 1,
+  "language": "ru",
+  "purpose": "Held-out QQ Quantum dialogue and reasoning smoke evaluation. Prompts are not included in the authored training corpus.",
+  "cases": [
+    {
+      "id": "QQD-01",
+      "category": "identity_and_capabilities",
+      "messages": [
+        {"role": "user", "content": "Представься и в двух предложениях объясни, чем ты являешься."}
+      ],
+      "rubric": [
+        "Identifies itself as QQ Quantum",
+        "Does not claim to be human or conscious",
+        "Does not claim unsupported capabilities"
+      ]
+    },
+    {
+      "id": "QQD-02",
+      "category": "multi_turn_context",
+      "messages": [
+        {"role": "user", "content": "Расскажи, как устроена Солнечная система."},
+        {"role": "assistant", "content": "Солнечная система включает Солнце и небесные тела, связанные его гравитацией."},
+        {"role": "user", "content": "А какая планета находится ближе всего к Солнцу?"}
+      ],
+      "rubric": [
+        "Understands that the follow-up asks about the Solar System",
+        "Answers Mercury",
+        "Does not repeat the previous broad definition"
+      ]
+    },
+    {
+      "id": "QQD-03",
+      "category": "multi_step_arithmetic",
+      "messages": [
+        {"role": "user", "content": "У числа 480 сначала вычли четверть, а потом результат разделили на 6. Какое число получилось? Покажи вычисление."}
+      ],
+      "rubric": [
+        "Calculates one quarter of 480 as 120",
+        "Calculates 480 minus 120 as 360",
+        "Calculates 360 divided by 6 as 60"
+      ]
+    },
+    {
+      "id": "QQD-04",
+      "category": "science_explanation",
+      "messages": [
+        {"role": "user", "content": "Почему на вершине высокой горы вода закипает при температуре ниже ста градусов?"}
+      ],
+      "rubric": [
+        "Mentions lower atmospheric pressure at altitude",
+        "Explains that lower pressure lowers boiling temperature",
+        "Avoids saying that water composition necessarily changes"
+      ]
+    },
+    {
+      "id": "QQD-05",
+      "category": "conceptual_distinction",
+      "messages": [
+        {"role": "user", "content": "Фраза «этот способ самый удобный» — факт или оценка? Объясни, как проверить такое утверждение."}
+      ],
+      "rubric": [
+        "Identifies the phrase as an evaluation/opinion without criteria",
+        "Suggests explicit measurable criteria and comparison",
+        "Does not treat preference as an objective universal fact"
+      ]
+    },
+    {
+      "id": "QQD-06",
+      "category": "biology",
+      "messages": [
+        {"role": "user", "content": "Объясни, почему грибы не относят к растениям."}
+      ],
+      "rubric": [
+        "States that fungi are a separate biological kingdom",
+        "Mentions that fungi do not photosynthesize like plants",
+        "Uses accessible language"
+      ]
+    },
+    {
+      "id": "QQD-07",
+      "category": "programming",
+      "messages": [
+        {"role": "user", "content": "В чём разница между списком и словарём в Python?"}
+      ],
+      "rubric": [
+        "Explains that lists are ordered sequences indexed by position",
+        "Explains that dictionaries map keys to values",
+        "Does not confuse dictionary keys with list indexes"
+      ]
+    },
+    {
+      "id": "QQD-08",
+      "category": "uncertainty_and_clarification",
+      "messages": [
+        {"role": "user", "content": "Сколько времени нужно, чтобы добраться туда?"}
+      ],
+      "rubric": [
+        "Recognizes that the destination and starting point are missing",
+        "Asks for the missing details or explains why it cannot calculate",
+        "Does not invent a travel time"
+      ]
+    },
+    {
+      "id": "QQD-09",
+      "category": "dialogue_style",
+      "messages": [
+        {"role": "user", "content": "Объясни, что такое вероятность, но очень коротко."}
+      ],
+      "rubric": [
+        "Gives a concise definition",
+        "Does not add an unnecessary long lecture",
+        "Uses understandable wording"
+      ]
+    },
+    {
+      "id": "QQD-10",
+      "category": "self_limitation",
+      "messages": [
+        {"role": "user", "content": "Если ты не знаешь точного ответа, что ты должен сделать?"}
+      ],
+      "rubric": [
+        "States that uncertainty should be acknowledged",
+        "Does not invent a confident answer",
+        "Can ask for clarification or suggest verification"
+      ]
+    }
+  ]
+}

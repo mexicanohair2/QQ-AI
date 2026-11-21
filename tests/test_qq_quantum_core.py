@@ -5,11 +5,54 @@ from pathlib import Path
 import torch
 
 from qq_quantum.model.tokenizer import ByteBPETokenizer
-from qq_quantum.model.training import _read_corpus, train
+from qq_quantum.model.training import _read_corpus, _split_corpus_documents, completed_training_step, train
 from qq_quantum.model.transformer import GPTConfig, QuantumGPT
 
 ROOT = Path(__file__).resolve().parents[1]
 CORPUS = ROOT / "qq_quantum" / "data" / "seed_corpus.txt.gz.b64"
+
+
+class CheckpointStepTests(unittest.TestCase):
+    def test_normalizes_pretraining_zero_based_step(self):
+        self.assertEqual(
+            completed_training_step({"format": "qq-quantum-checkpoint-v2", "step": 99}),
+            100,
+        )
+
+    def test_preserves_sft_one_based_step(self):
+        self.assertEqual(
+            completed_training_step({"format": "qq-quantum-sft-v1", "step": 325}),
+            325,
+        )
+
+    def test_rejects_unknown_checkpoint_format(self):
+        with self.assertRaises(ValueError):
+            completed_training_step({"format": "unknown", "step": 10})
+
+
+class CorpusSplitTests(unittest.TestCase):
+    def test_keeps_whole_documents_in_exactly_one_split(self):
+        documents = [f"Документ {index}\nСодержимое {index}." for index in range(10)]
+        corpus = "\n\n".join(documents)
+        train_text, validation_text = _split_corpus_documents(corpus, 0.2, 42)
+        train_docs = train_text.split("\n\n")
+        validation_docs = validation_text.split("\n\n")
+        self.assertEqual(len(train_docs), 8)
+        self.assertEqual(len(validation_docs), 2)
+        self.assertEqual(set(train_docs) | set(validation_docs), set(documents))
+        self.assertFalse(set(train_docs) & set(validation_docs))
+
+    def test_document_split_is_reproducible_and_seeded(self):
+        corpus = "\n\n".join(f"Блок {index}." for index in range(20))
+        first = _split_corpus_documents(corpus, 0.1, 2026)
+        repeated = _split_corpus_documents(corpus, 0.1, 2026)
+        other = _split_corpus_documents(corpus, 0.1, 2027)
+        self.assertEqual(first, repeated)
+        self.assertNotEqual(first[1], other[1])
+
+    def test_rejects_unusable_document_split(self):
+        with self.assertRaises(ValueError):
+            _split_corpus_documents("Only one block", 0.1, 1)
 
 
 class TokenizerTests(unittest.TestCase):

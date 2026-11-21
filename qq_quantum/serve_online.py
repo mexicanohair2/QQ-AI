@@ -5,59 +5,31 @@ from pathlib import Path
 import torch
 from qq_quantum.model.tokenizer import ByteBPETokenizer
 from qq_quantum.model.transformer import GPTConfig, QuantumGPT
-from qq_quantum.model.training import _read_corpus
+from qq_quantum.model.training import _read_corpus, completed_training_step
+from qq_quantum.dialogue import build_conversation_prompt
+from qq_quantum.retrieval import find_answer, load_qa, normalize_word, terms
 
 ROOT = Path(__file__).resolve().parent
-MODEL_DIR = ROOT / "artifacts" / "model-online-v1"
+MODEL_DIR = Path(os.environ.get("QQ_QUANTUM_MODEL_DIR", str(ROOT / "artifacts" / "model-online-v1"))).resolve()
+CORPUS_PATH = Path(os.environ.get("QQ_QUANTUM_CORPUS_PATH", str(ROOT / "data" / "seed_corpus.txt.gz.b64"))).resolve()
 TOKEN = os.environ.get("QQ_QUANTUM_TOKEN", "")
 MAX_BODY = 520_000
-STOP = set("а без бы в во вот все вы где да для до его ее если есть же за и из или им их к как ко когда кто ли мне мы на над не него нее ни но о об от по под при про раз с со так то тоже у уже что чтобы это этот я".split())
 WORD_RE = re.compile(r"[а-яёa-z0-9]+", re.I)
 
-def terms(text: str) -> list[str]:
-    return [w for w in WORD_RE.findall(text.lower()) if len(w) > 1 and w not in STOP]
-
-def load_qa(corpus: str):
-    pairs, question = [], None
-    for line in corpus.splitlines():
-        line = line.strip()
-        if line.startswith("Пользователь:"):
-            question = line[len("Пользователь:"):].strip()
-        elif line.startswith("QQ Quantum:") and question:
-            answer = line[len("QQ Quantum:"):].strip()
-            if answer:
-                pairs.append((question, answer, set(terms(question))))
-            question = None
-    return pairs
-
-def find_answer(question: str, pairs):
-    query = set(terms(question))
-    if not query:
-        return None
-    best, best_score = None, 0.0
-    for prompt, answer, words in pairs:
-        overlap = len(query & words)
-        coverage = overlap / len(query)
-        precision = overlap / max(1, len(words))
-        score = coverage * (1 + 0.7 * precision + (1.25 if coverage == 1 and precision == 1 else 0))
-        if score > best_score:
-            best, best_score = answer, score
-    return best if best_score >= 1.45 else None
-
-def load_model():
-    checkpoint = torch.load(MODEL_DIR / "latest.pt", map_location="cpu", weights_only=False)
-    tokenizer = ByteBPETokenizer.load(MODEL_DIR / "tokenizer.json")
+def load_model(model_dir: Path = MODEL_DIR, corpus_path: Path = CORPUS_PATH):
+    checkpoint = torch.load(model_dir / "latest.pt", map_location="cpu", weights_only=False)
+    tokenizer = ByteBPETokenizer.load(model_dir / "tokenizer.json")
     model = QuantumGPT(GPTConfig(**checkpoint["model_config"]))
     model.load_state_dict(checkpoint["model"])
     model.eval()
-    corpus = _read_corpus(ROOT / "data" / "seed_corpus.txt.gz.b64")
+    corpus = _read_corpus(corpus_path)
     return model, tokenizer, load_qa(corpus), checkpoint, corpus
 
 MODEL, TOKENIZER, QA, CHECKPOINT, CORPUS = load_model()
 CORPUS_WORDS = set(w for w in terms(CORPUS) if len(w) >= 3)
 
 def grounded(text: str) -> bool:
-    words = [w for w in WORD_RE.findall(text.lower()) if len(w) >= 3]
+    words = [normalize_word(w) for w in WORD_RE.findall(text.lower()) if len(w) >= 3]
     if len(words) < 3:
         return False
     known = sum(w in CORPUS_WORDS for w in words)
@@ -113,7 +85,7 @@ def answer_query(messages):
     known = find_answer(last, QA)
     if known:
         return known
-    prompt = "Ты QQ Quantum. Ответь на русском кратко и точно.\nПользователь: " + last[:500] + "\nQQ Quantum:"
+    prompt = build_conversation_prompt(messages, tokenizer=TOKENIZER, max_tokens=MODEL.config.block_size)
     ids = torch.tensor([TOKENIZER.encode(prompt, add_bos=True)], dtype=torch.long)
     with torch.inference_mode():
         output = MODEL.generate(ids, max_new_tokens=48, temperature=0.65, top_k=24, eos_token_id=2)
@@ -155,7 +127,8 @@ class Handler(BaseHTTPRequestHandler):
             "status": "ready",
             "model": "QQ Quantum Online experimental",
             "architecture": "own decoder-only Transformer",
-            "training_step": int(CHECKPOINT["step"]) + 1,
+            "training_step": completed_training_step(CHECKPOINT),
+            "training_format": CHECKPOINT.get("format"),
             "train_loss": CHECKPOINT.get("loss"),
             "validation_loss": CHECKPOINT.get("validation_loss"),
             "device": "cpu",
@@ -205,5 +178,5 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     if not TOKEN:
         raise SystemExit("QQ_QUANTUM_TOKEN is required")
-    print("QQ Quantum API loaded:", {"step": int(CHECKPOINT["step"]) + 1, "qa": len(QA), "device": "cpu"}, flush=True)
+    print("QQ Quantum API loaded:", {"step": completed_training_step(CHECKPOINT), "qa": len(QA), "device": "cpu"}, flush=True)
     ThreadingHTTPServer(("0.0.0.0", 8000), Handler).serve_forever()

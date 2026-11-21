@@ -1,6 +1,6 @@
 """Reproducible CPU/GPU training with validation and exact checkpoint resume."""
 from __future__ import annotations
-import base64, binascii, gzip, hashlib, random
+import base64, binascii, gzip, hashlib, random, re
 from pathlib import Path
 import numpy as np
 import torch
@@ -8,7 +8,19 @@ from torch.optim import AdamW
 from .tokenizer import ByteBPETokenizer
 from .transformer import GPTConfig, QuantumGPT
 CHECKPOINT_FORMAT="qq-quantum-checkpoint-v2"
-SPLIT_POLICY="contiguous-90-10-v1"
+SPLIT_POLICY="seeded-random-document-split-v2"
+
+
+def completed_training_step(checkpoint: dict) -> int:
+    """Normalize step numbering across pretraining and assistant-only SFT formats."""
+    step = int(checkpoint.get("step", -1))
+    if step < 0:
+        return 0
+    if checkpoint.get("format") == CHECKPOINT_FORMAT:
+        return step + 1
+    if checkpoint.get("format") == "qq-quantum-sft-v1":
+        return step
+    raise ValueError("Unsupported QQ Quantum checkpoint format")
 
 def _read_corpus(path: str | Path) -> str:
     # Supports plain UTF-8, gzip, and base64-encoded gzip files.
@@ -28,6 +40,24 @@ def _atomic_torch_save(payload:dict,path:Path):
     path.parent.mkdir(parents=True,exist_ok=True)
     tmp=path.with_suffix(path.suffix+".tmp")
     torch.save(payload,tmp);tmp.replace(path)
+
+def _split_corpus_documents(corpus: str, validation_fraction: float, seed: int) -> tuple[str, str]:
+    """Split whole blank-line-delimited documents to prevent dialogue leakage."""
+    if not 0 < validation_fraction < 1:
+        raise ValueError("Invalid validation fraction")
+    documents = [part.strip() for part in re.split(r"\n\s*\n", corpus) if part.strip()]
+    if len(documents) < 2:
+        raise ValueError("At least two documents are required for a document split")
+    validation_count = max(1, int(round(len(documents) * validation_fraction)))
+    if validation_count >= len(documents):
+        validation_count = len(documents) - 1
+    indices = list(range(len(documents)))
+    random.Random(seed).shuffle(indices)
+    validation_indices = set(indices[:validation_count])
+    train_documents = [doc for index, doc in enumerate(documents) if index not in validation_indices]
+    validation_documents = [doc for index, doc in enumerate(documents) if index in validation_indices]
+    return "\n\n".join(train_documents), "\n\n".join(validation_documents)
+
 
 def _batch(data,batch_size,block_size,device):
     max_start=len(data)-block_size-1
@@ -64,6 +94,7 @@ def train(*,corpus_path:str,output_dir:str,max_steps:int=300,batch_size:int=16,b
     corpus=_read_corpus(corpus_path)
     corpus_sha=hashlib.sha256(corpus.encode()).hexdigest()
     if len(corpus)<block_size*2+4: raise ValueError("Corpus too short")
+    train_text, validation_text = _split_corpus_documents(corpus, validation_fraction, seed)
     tok_path,ckpt_path=output/"tokenizer.json",output/"latest.pt"
     requested={"seed":seed,"batch_size":batch_size,"block_size":block_size,"learning_rate":learning_rate,
        "vocab_size":vocab_size,"n_layer":n_layer,"n_head":n_head,"n_embd":n_embd,"dropout":dropout,
@@ -90,13 +121,13 @@ def train(*,corpus_path:str,output_dir:str,max_steps:int=300,batch_size:int=16,b
         random.setstate(ckpt["python_rng"]);np.random.set_state(ckpt["numpy_rng"]);torch.set_rng_state(ckpt["torch_rng"])
     else:
         random.seed(seed);np.random.seed(seed);torch.manual_seed(seed)
-        tokenizer=ByteBPETokenizer(vocab_size).train(corpus,vocab_size=vocab_size);tokenizer.save(tok_path)
+        tokenizer=ByteBPETokenizer(vocab_size).train(train_text,vocab_size=vocab_size);tokenizer.save(tok_path)
         cfg=GPTConfig(vocab_size=tokenizer.real_size,block_size=block_size,n_layer=n_layer,n_head=n_head,n_embd=n_embd,dropout=dropout)
         model=QuantumGPT(cfg).to(resolved);optimizer=AdamW(model.parameters(),lr=learning_rate);start_step=0
-    data=torch.tensor(tokenizer.encode(corpus),dtype=torch.long)
-    split=int(len(data)*(1.0-validation_fraction));split=max(block_size+2,min(split,len(data)-block_size-2))
-    train_data,val_data=data[:split],data[split:]
-    if len(train_data)<block_size+2 or len(val_data)<block_size+2: raise ValueError("Corpus too short after split")
+    train_data=torch.tensor(tokenizer.encode(train_text),dtype=torch.long)
+    val_data=torch.tensor(tokenizer.encode(validation_text),dtype=torch.long)
+    if len(train_data)<block_size+2 or len(val_data)<block_size+2:
+        raise ValueError("A corpus split is too short for the configured block size")
     target=min(max_steps,stop_at_step) if stop_at_step is not None else max_steps
     if target<start_step:return {"trained":False,"final_step":start_step-1,"device":resolved}
     history=[];last_loss=None;last_val=None
@@ -108,7 +139,8 @@ def train(*,corpus_path:str,output_dir:str,max_steps:int=300,batch_size:int=16,b
           "numpy_rng":np.random.get_state(),"torch_rng":torch.get_rng_state(),
           "cuda_rng":torch.cuda.get_rng_state_all() if resolved=="cuda" else None,
           "training":{**requested,"corpus_path":str(corpus_path),"corpus_sha256":corpus_sha,
-            "corpus_characters":len(corpus),"corpus_tokens":len(data),"train_tokens":len(train_data),"validation_tokens":len(val_data)}}
+            "corpus_characters":len(corpus),"corpus_documents":len([x for x in re.split(r"\n\s*\n", corpus) if x.strip()]),
+            "train_tokens":len(train_data),"validation_tokens":len(val_data)}}
         _atomic_torch_save(payload,ckpt_path)
     if target==0 and start_step==0:save(-1,None)
     for step in range(start_step,target):
@@ -120,4 +152,5 @@ def train(*,corpus_path:str,output_dir:str,max_steps:int=300,batch_size:int=16,b
         if completed%checkpoint_interval==0 or completed==target:save(step,last_loss)
     return {"trained":bool(history),"start_step":start_step,"final_step":target-1 if history else start_step-1,
       "steps_run":len(history),"last_loss":last_loss,"validation_loss":last_val,"device":resolved,
-      "checkpoint":str(ckpt_path),"tokenizer":str(tok_path)}
+      "checkpoint":str(ckpt_path),"tokenizer":str(tok_path),
+      "train_tokens":len(train_data),"validation_tokens":len(val_data),"split_policy":SPLIT_POLICY}
