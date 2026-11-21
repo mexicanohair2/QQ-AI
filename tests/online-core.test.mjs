@@ -883,6 +883,21 @@ test("QQ Quantum chat uses its own bundled model; Vision credentials remain sepa
 });
 
 
+test("primary QQ Quantum text chat always uses its own server-side model runtime", async () => {
+  const chat = await readFile(new URL("../api/chat.ts", import.meta.url), "utf8");
+  const runtime = await readFile(new URL("../src/lib/qq-quantum-server.ts", import.meta.url), "utf8");
+
+  assert.match(chat, /import \{ answerWithQuantum \} from "\.\.\/src\/lib\/qq-quantum-server\.ts"/);
+  assert.match(chat, /needsSearch \? buildSearchOnlyAnswer\(sources\) : await answerWithQuantum\(messages\)/);
+  assert.doesNotMatch(chat, /model-gateway|QQ_AI_API_URL|DEEPSEEK_API_KEY|OPENAIAPIKEY|OPENAI_API_KEY|GEMINI_API_KEY|ANTHROPIC_API_KEY/);
+
+  assert.match(runtime, /server\/quantum\/model\.json/);
+  assert.match(runtime, /new browser\.ByteBPETokenizer\(assets\.tokenizer\)/);
+  assert.match(runtime, /new browser\.QuantumBrowserModel\(assets\.metadata, weights\)/);
+  assert.match(runtime, /runtime\.model\.generate\(ids, capacity/);
+  assert.doesNotMatch(runtime, /model-gateway|buildChatCompletionPayload|OPENAI_API_KEY|DEEPSEEK_API_KEY|GEMINI_API_KEY|ANTHROPIC_API_KEY/);
+});
+
 test("DeepSeek API key alias is server-side and uses the documented Chat Completions format", async () => {
   const {
     buildChatCompletionPayload,
