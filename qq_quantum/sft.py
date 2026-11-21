@@ -13,7 +13,7 @@ from torch.optim import AdamW
 
 from .dialogue import build_conversation_prompt
 from .model.tokenizer import ByteBPETokenizer
-from .model.training import SPLIT_POLICY, _atomic_torch_save, _read_corpus, _split_corpus_documents
+from .model.training import CHECKPOINT_FORMAT, SPLIT_POLICY, _atomic_torch_save, _read_corpus, _split_corpus_documents
 from .model.transformer import GPTConfig, QuantumGPT
 from training.corpus_utils import load_corpus_manifest
 
@@ -247,8 +247,29 @@ def train_sft(
         raise FileNotFoundError("Pretrained QQ Quantum checkpoint and tokenizer are required")
 
     pretrained = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
-    model_config = GPTConfig(**pretrained["model_config"])
+    if pretrained.get("format") != CHECKPOINT_FORMAT:
+        raise ValueError("SFT requires a QQ Quantum pretraining checkpoint from the current training pipeline")
+    pretraining = pretrained.get("training")
+    if not isinstance(pretraining, dict):
+        raise ValueError("Pretraining checkpoint is missing corpus and tokenizer provenance metadata")
+
     tokenizer = ByteBPETokenizer.load(tokenizer_path)
+    tokenizer_sha256 = hashlib.sha256(tokenizer_path.read_bytes()).hexdigest()
+    required_pretraining = {
+        "corpus_sha256": corpus_sha,
+        "corpus_manifest_sha256": corpus_manifest["manifest_sha256"],
+        "split_policy": SPLIT_POLICY,
+        "seed": seed,
+        "validation_fraction": validation_fraction,
+        "tokenizer_sha256": tokenizer_sha256,
+    }
+    for key, expected in required_pretraining.items():
+        if key not in pretraining or pretraining[key] != expected:
+            raise ValueError(
+                "Pretraining checkpoint is incompatible with SFT: " + key + " does not match"
+            )
+
+    model_config = GPTConfig(**pretrained["model_config"])
     if model_config.vocab_size != tokenizer.real_size:
         raise ValueError("Pretrained model and tokenizer vocabulary sizes do not match")
 
@@ -290,6 +311,8 @@ def train_sft(
         "corpus_factual_review_required": corpus_manifest["factual_review_required"],
         "corpus_pii_review_required": corpus_manifest["pii_review_required"],
         "pretrained_checkpoint": str(checkpoint_path),
+        "pretrained_checkpoint_sha256": hashlib.sha256(checkpoint_path.read_bytes()).hexdigest(),
+        "pretrained_tokenizer_sha256": tokenizer_sha256,
         "train_samples": len(train_samples),
         "validation_samples": len(validation_samples),
         "max_answer_tokens": max_answer_tokens,

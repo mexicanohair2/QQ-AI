@@ -1,3 +1,4 @@
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -6,7 +7,7 @@ import torch
 
 from qq_quantum.dialogue import DIALOGUE_PREFIX, SYSTEM_PREFIX
 from qq_quantum.model.tokenizer import ByteBPETokenizer
-from qq_quantum.model.transformer import GPTConfig, QuantumGPT
+from qq_quantum.model.training import train
 from qq_quantum.sft import build_sft_samples, parse_dialogue_document, train_sft
 
 
@@ -170,35 +171,88 @@ class SupervisedFineTuningTests(unittest.TestCase):
         self.assertTrue(any(count > 12 for count in supervised))
         self.assertTrue(all(count <= 65 for count in supervised))
 
-    def test_sft_training_writes_loadable_own_model_checkpoint(self):
+    def _create_pretrained_checkpoint(self, corpus_path: Path, pretrained_dir: Path):
+        return train(
+            corpus_path=str(corpus_path),
+            output_dir=str(pretrained_dir),
+            max_steps=1,
+            batch_size=2,
+            block_size=128,
+            learning_rate=1e-3,
+            vocab_size=512,
+            n_layer=1,
+            n_head=2,
+            n_embd=16,
+            dropout=0,
+            seed=33,
+            device="cpu",
+            checkpoint_interval=1,
+            validation_fraction=0.1,
+        )
+
+    def test_sft_rejects_pretraining_checkpoint_without_provenance(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             corpus_path = root / "corpus.txt"
             corpus_path.write_text(self.corpus, encoding="utf-8")
             pretrained_dir = root / "pretrained"
             pretrained_dir.mkdir(parents=True)
-
             tokenizer = self.tokenizer()
-            config = GPTConfig(
-                vocab_size=tokenizer.real_size,
-                block_size=128,
-                n_layer=1,
-                n_head=2,
-                n_embd=16,
-                dropout=0,
-            )
-            torch.manual_seed(33)
-            model = QuantumGPT(config)
-            torch.save(
-                {
-                    "format": "qq-quantum-checkpoint-v2",
-                    "step": 0,
-                    "model_config": model.config_dict(),
-                    "model": model.state_dict(),
+            torch.save({
+                "format": "qq-quantum-checkpoint-v2",
+                "step": 0,
+                "model_config": {
+                    "vocab_size": tokenizer.real_size,
+                    "block_size": 128,
+                    "n_layer": 1,
+                    "n_head": 2,
+                    "n_embd": 16,
+                    "dropout": 0,
                 },
-                pretrained_dir / "latest.pt",
-            )
+                "model": {},
+                "training": {},
+            }, pretrained_dir / "latest.pt")
             tokenizer.save(pretrained_dir / "tokenizer.json")
+            with self.assertRaisesRegex(ValueError, "missing corpus and tokenizer provenance"):
+                train_sft(
+                    corpus_path=str(corpus_path),
+                    pretrained_dir=str(pretrained_dir),
+                    output_dir=str(root / "sft"),
+                    max_steps=1,
+                    batch_size=2,
+                    seed=33,
+                    device="cpu",
+                    checkpoint_interval=1,
+                )
+
+    def test_sft_rejects_pretraining_corpus_mismatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            corpus_path = root / "corpus.txt"
+            corpus_path.write_text(self.corpus, encoding="utf-8")
+            pretrained_dir = root / "pretrained"
+            self._create_pretrained_checkpoint(corpus_path, pretrained_dir)
+            changed_corpus = root / "changed-corpus.txt"
+            changed_corpus.write_text(self.corpus + "\n\nДополнительный документ.", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "corpus_sha256"):
+                train_sft(
+                    corpus_path=str(changed_corpus),
+                    pretrained_dir=str(pretrained_dir),
+                    output_dir=str(root / "sft"),
+                    max_steps=1,
+                    batch_size=2,
+                    seed=33,
+                    device="cpu",
+                    checkpoint_interval=1,
+                )
+
+    def test_sft_training_writes_loadable_own_model_checkpoint(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            corpus_path = root / "corpus.txt"
+            corpus_path.write_text(self.corpus, encoding="utf-8")
+            pretrained_dir = root / "pretrained"
+            self._create_pretrained_checkpoint(corpus_path, pretrained_dir)
 
             result = train_sft(
                 corpus_path=str(corpus_path),
@@ -218,8 +272,13 @@ class SupervisedFineTuningTests(unittest.TestCase):
             checkpoint = torch.load(result["checkpoint"], map_location="cpu", weights_only=False)
             self.assertEqual(checkpoint["format"], "qq-quantum-sft-v1")
             self.assertIn("model", checkpoint)
+            self.assertEqual(
+                checkpoint["training"]["pretrained_tokenizer_sha256"],
+                hashlib.sha256((pretrained_dir / "tokenizer.json").read_bytes()).hexdigest(),
+            )
             self.assertTrue((root / "sft" / "best.pt").is_file())
             self.assertTrue((root / "sft" / "tokenizer.json").is_file())
+
 
 
 if __name__ == "__main__":

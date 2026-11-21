@@ -137,6 +137,8 @@ def train(*,corpus_path:str,output_dir:str,max_steps:int=300,batch_size:int=16,b
                 f"Cannot resume: checkpoint and tokenizer must exist in {output}"
             )
         tokenizer=ByteBPETokenizer.load(tok_path)
+        tokenizer_sha256=hashlib.sha256(tok_path.read_bytes()).hexdigest()
+        requested["tokenizer_sha256"]=tokenizer_sha256
         ckpt=torch.load(ckpt_path,map_location="cpu",weights_only=False)
         if ckpt.get("format") != CHECKPOINT_FORMAT:
             raise ValueError("Unsupported checkpoint format")
@@ -150,7 +152,10 @@ def train(*,corpus_path:str,output_dir:str,max_steps:int=300,batch_size:int=16,b
         if resolved == "mps" and ckpt.get("mps_rng") is None:
             raise ValueError("Checkpoint is missing MPS RNG state; exact resume is unavailable")
         for key,value in requested.items():
-            if key in saved and saved[key]!=value: raise ValueError(f"Cannot change {key} when resuming")
+            if key not in saved:
+                raise ValueError(f"Cannot resume: checkpoint is missing exact-resume metadata {key}")
+            if saved[key]!=value:
+                raise ValueError(f"Cannot change {key} when resuming")
         cfg=GPTConfig(**ckpt["model_config"])
         if cfg.block_size!=block_size or cfg.vocab_size!=tokenizer.real_size: raise ValueError("Model/tokenizer mismatch")
         model=QuantumGPT(cfg);model.load_state_dict(ckpt["model"]);model.to(resolved)
@@ -166,6 +171,8 @@ def train(*,corpus_path:str,output_dir:str,max_steps:int=300,batch_size:int=16,b
     else:
         random.seed(seed);np.random.seed(seed);torch.manual_seed(seed)
         tokenizer=ByteBPETokenizer(vocab_size).train(train_text,vocab_size=vocab_size);tokenizer.save(tok_path)
+        tokenizer_sha256=hashlib.sha256(tok_path.read_bytes()).hexdigest()
+        requested["tokenizer_sha256"]=tokenizer_sha256
         cfg=GPTConfig(vocab_size=tokenizer.real_size,block_size=block_size,n_layer=n_layer,n_head=n_head,n_embd=n_embd,dropout=dropout)
         model=QuantumGPT(cfg).to(resolved);optimizer=AdamW(model.parameters(),lr=learning_rate);start_step=0
     train_data=torch.tensor(tokenizer.encode(train_text),dtype=torch.long)
