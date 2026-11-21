@@ -4,7 +4,7 @@ Last checked: 2026-11-21
 
 ## What already works
 
-- The QQ Quantum frontend and `/api/chat` gateway are implemented in the `feature/qq-quantum-dual-mode` branch.
+- The QQ Quantum frontend and `/api/chat` gateway are implemented in the `feature/qq-quantum-dual-mode` branch. A Vercel Preview is live at https://qq-ai-preview-git-feature-qq-quantum-dual-mode-mexicanohaie.vercel.app/.
 - The gateway only forwards text generation to a separately hosted QQ-owned model endpoint. It has no third-party language-model fallback.
 - The private Python inference service runs the project's own decoder-only Transformer and byte-level BPE tokenizer.
 - The private service requires a bearer token, rejects invalid requests, and exposes a health endpoint.
@@ -14,13 +14,13 @@ Last checked: 2026-11-21
 ## Browser-owned QQ Quantum mode
 
 - The web app now has a separate Quantum mode. It does not reuse the legacy offline model or silently fall back to a third-party LLM.
-- A user can import a self-contained QQ_Quantum_Offline.html model package. The browser validates the package, saves it into IndexedDB, and runs the model in a dedicated worker.
+- Selecting Quantum automatically downloads the model from the website static assets (`/quantum/manifest.json` and `/quantum/model.json`) on the first launch. The browser validates the model format and SHA-256 weights, saves it into IndexedDB, and runs it in a dedicated worker. No HTML file is required.
 - The model package is approximately 3.4 MiB for the currently selected experimental checkpoint. It includes the model weights, tokenizer, and the authored knowledge corpus.
 - The selected SFT checkpoint uses the qq-quantum-sft-v1 format. The exporter supports both pretraining and SFT checkpoints and uses the shared completed-step counter so SFT metadata is not off by one.
-- An actual package was exported and its compressed weights checksum was verified in a private development sandbox. The package itself was not added to this public repository or deployed to the site.
-- The browser chat can only run after the user has obtained and imported that HTML package on the target device. Browser storage is per browser/device; it is not synced through the website.
+- The model asset is served by the Vercel Preview at `/quantum/model.json` (3,564,623 bytes). Its gzip-decoded weights are 2,701,312 bytes and match SHA-256 `0f533e6057e371f1967a5aedb34ddef1e1ffad80db5b8a5b5936ede75abd2cc5`. The model asset is deployed with the site; it is not committed to the public Git repository.
+- After the first download, browser storage is per browser/device and is not synced through the website. If local browser storage is cleared, the site downloads the model again.
 
-## Remaining blockers before a public chat works
+## Remaining blockers for Online mode and production launch
 
 1. **A durable public inference host is not connected.** The current Python API is running only in a temporary private development sandbox. That URL is not a production endpoint.
 2. **The model checkpoint must be transferred to protected server storage.** The GitHub repository is public, so model weights are not silently added to it. The checkpoint must be placed in a private deployment volume or another protected artifact store.
@@ -32,7 +32,7 @@ Last checked: 2026-11-21
 
 - No Railway project is currently connected to the account, so no Railway service has been created and no paid hosting has been provisioned.
 - The Vercel development sandbox is temporary and must not be treated as a production server.
-- No public website has been switched to the experimental model. The browser-mode UI is implemented on the feature branch, but the model package is not yet hosted for one-tap download.
+- The feature-branch Preview is live and serves the browser-owned model for one-tap download. The production website has not been switched; the real Android device flow and actual model responses still need hands-on verification.
 - QQCross has not been modified.
 
 ## Runtime configuration
