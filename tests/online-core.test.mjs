@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 test("online route uses the bundled self-hosted QQ Quantum runtime", async () => {
   const source = await readFile(new URL("../api/chat.ts", import.meta.url), "utf8");
   const runtime = await readFile(new URL("../src/lib/qq-quantum-server.ts", import.meta.url), "utf8");
+  assert.ok(source.includes("export async function POST(request: Request)"));
   assert.match(source, /answerWithQuantum/);
   assert.match(source, /buildSearchOnlyAnswer/);
   assert.doesNotMatch(source, /QQ_QUANTUM_ONLINE_URL|QQ_QUANTUM_ONLINE_TOKEN|safeModelEndpoint|DEEPSEEK_API_KEY/);
@@ -196,7 +197,7 @@ test("welcome screen exposes only online mode and does not ask users to download
 test("capability-check failure remains unknown and reports an online connection check failure", async () => {
   const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
   assert.match(app, /setOnlineModelReady\(null\);[\s\S]*setVisionReady\(null\);[\s\S]*setCapabilitiesUnavailable\(true\)/);
-  assert.match(app, /Не удалось проверить подключение к онлайн-модели/);
+  assert.match(app, /Не удалось проверить подключение к серверной модели QQ Quantum/);
 });
 
 
@@ -1012,7 +1013,7 @@ test("QQ Quantum browser Transformer matches Python logits using the same export
 
 test("status endpoint loads and verifies the bundled model through the named GET handler", async () => {
   const source = await readFile(new URL("../api/status.ts", import.meta.url), "utf8");
-  assert.match(source, /export async function GET\\(request: Request\\)/);
+  assert.ok(source.includes("export async function GET(request: Request): Promise<Response>"));
   assert.match(source, /ensureQuantumReady/);
   const { GET: statusHandler } = await import("../api/status.ts");
   const response = await statusHandler(new Request("https://qq-ai.test/api/status"));
