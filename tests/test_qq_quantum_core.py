@@ -96,6 +96,29 @@ class TransformerTests(unittest.TestCase):
             GPTConfig(vocab_size=260).validate()
 
 
+    def test_tied_embeddings_are_counted_once(self):
+        config = GPTConfig(
+            vocab_size=300,
+            block_size=16,
+            n_layer=1,
+            n_head=2,
+            n_embd=16,
+            dropout=0,
+        )
+        model = QuantumGPT(config)
+        self.assertIs(model.lm_head.weight, model.token_embedding.weight)
+
+        # The output head shares the input embedding parameter; count unique
+        # trainable parameters, not duplicate state-dict aliases.
+        unique_parameters = sum(parameter.numel() for parameter in model.parameters())
+        expected = (
+            config.vocab_size * config.n_embd
+            + config.block_size * config.n_embd
+            + config.n_layer * (12 * config.n_embd**2 + 13 * config.n_embd)
+            + 2 * config.n_embd
+        )
+        self.assertEqual(unique_parameters, expected)
+
 class TrainingTests(unittest.TestCase):
     def test_reads_plain_gzip_and_base64_gzip_corpus_files(self):
         import base64
