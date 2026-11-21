@@ -11,9 +11,26 @@ Build QQ AI into a genuinely useful Russian-first general assistant and a depend
 
 Do not claim that a feature works merely because a button, type, endpoint, specification, or deployment exists. A feature is complete only after its full user flow is implemented and tested.
 
-The project is an application and orchestration layer around existing models and tools. Do not claim that we are training a new foundation model from scratch.
+QQ Quantum is the project's own language model, developed collaboratively by the project owner, ChatGPT, and DeepSeek. It is trained from random initialization using project-owned architecture, tokenizer, training code, and weights. This is a hard product requirement, not an optional experiment.
+
+Do not replace QQ Quantum with Gemma, Qwen, Llama, DeepSeek, or any other pretrained language model; do not load third-party pretrained weights; do not use an external LLM as a silent fallback or as the primary generator. DeepSeek may be used as a development/review collaborator where explicitly available, but its pretrained model weights are not QQ Quantum weights.
+
+External services may provide non-generative tools such as web search or data retrieval. They must not generate the assistant's answer in place of QQ Quantum. The online inference service must load QQ-owned checkpoints only.
+
+The current small Transformer and smoke checkpoints are engineering prototypes, not a medium-capability assistant. The target is a genuinely medium-sized QQ Quantum model. Determine its parameter scale, context length, training-token budget, and hosting requirements through a documented compute-feasibility gate; never relabel a tiny prototype as medium.
 
 ## 1. Product boundaries — non-negotiable
+
+### QQ Quantum model ownership — non-negotiable
+- QQ Quantum is trained from scratch with randomly initialized weights.
+- Architecture, tokenizer, training loop, checkpoints, inference runtime, and evaluation harness are project-owned.
+- No pretrained third-party language-model weights, adapters, LoRA checkpoints, hosted LLM fallback, or model distillation from a third-party LLM may be introduced without a separate explicit change to this core requirement. The current requirement is to use none.
+- Model-quality improvements must come from QQ-authored/licensed training data, better architecture and training, deterministic tools, and separately identified retrieval/search.
+- Every checkpoint must record architecture/config, tokenizer hash, training-corpus hash, split policy, seed, optimizer/training settings, completed steps, validation metrics, and artifact SHA-256.
+- Keep base pretraining, supervised dialogue training, and any later preference-training stage reproducible and separately evaluated.
+- A successful loss decrease or valid text generation is not evidence of useful assistant quality. Promote a checkpoint only after the held-out benchmark and regression checks pass.
+- Current delivery phase is online inference only. Browser-side/offline model delivery is deferred; the browser must not ask users to download model weights in this phase.
+
 
 ### QQ AI now
 - Independent web application in `mexicanohair2/QQ-AI`.
