@@ -150,7 +150,10 @@ class SupervisedFineTuningTests(unittest.TestCase):
             " ".join(f"слово{word}" for word in range(90)) + "."
             for index in range(10)
         )
-        tokenizer = ByteBPETokenizer(1024).train(text, vocab_size=1024)
+        tokenizer_text = (
+            SYSTEM_PREFIX + " Пользователь вопрос ответ алгоритм объяснение значение пример текст. "
+        ) * 100
+        tokenizer = ByteBPETokenizer(1024).train(tokenizer_text, vocab_size=1024)
         train_samples, validation_samples = build_sft_samples(
             text,
             tokenizer,
