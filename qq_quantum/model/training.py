@@ -136,9 +136,9 @@ def train(*,corpus_path:str,output_dir:str,max_steps:int=300,batch_size:int=16,b
             raise ValueError("Checkpoint format or corpus mismatch")
         if saved.get("device", resolved) != resolved:
             raise ValueError("Cannot resume exact training on a different device")
-        if resolved == "cuda" and not ckpt.get("cuda_rng"):
+        if resolved == "cuda" and ckpt.get("cuda_rng") is None:
             raise ValueError("Checkpoint is missing CUDA RNG state; exact resume is unavailable")
-        if resolved == "mps" and not ckpt.get("mps_rng"):
+        if resolved == "mps" and ckpt.get("mps_rng") is None:
             raise ValueError("Checkpoint is missing MPS RNG state; exact resume is unavailable")
         for key,value in requested.items():
             if key in saved and saved[key]!=value: raise ValueError(f"Cannot change {key} when resuming")

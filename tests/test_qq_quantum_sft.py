@@ -144,8 +144,8 @@ class SupervisedFineTuningTests(unittest.TestCase):
             self.assertLessEqual(sample["prompt_token_count"], 128)
 
     def test_requested_answer_budget_is_not_silently_reduced_to_twelve_tokens(self):
-        text = "\\n\\n".join(
-            f"Пользователь: Объясни длинный пример номер {index}.\\n"
+        text = "\n\n".join(
+            f"Пользователь: Объясни длинный пример номер {index}.\n"
             f"QQ Quantum: Подробный ответ номер {index}: " +
             " ".join(f"слово{word}" for word in range(90)) + "."
             for index in range(10)

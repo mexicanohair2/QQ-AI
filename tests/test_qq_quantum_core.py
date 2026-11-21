@@ -51,8 +51,8 @@ class CorpusSplitTests(unittest.TestCase):
         self.assertNotEqual(first[1], other[1])
 
     def test_normalized_duplicate_documents_never_cross_partitions(self):
-        corpus = "\\n\\n".join([
-            "Повторяющийся документ.\\nСодержимое без изменений.",
+        corpus = "\n\n".join([
+            "Повторяющийся документ.\nСодержимое без изменений.",
             "Совершенно другой материал.",
             "ПОВТОРЯЮЩИЙСЯ   ДОКУМЕНТ. СОДЕРЖИМОЕ БЕЗ ИЗМЕНЕНИЙ.",
             "Третий независимый источник.",
@@ -60,14 +60,14 @@ class CorpusSplitTests(unittest.TestCase):
         ])
         train_text, validation_text = _split_corpus_documents(corpus, 0.4, 17)
         normalized = lambda value: " ".join(value.split()).casefold()
-        train_docs = {normalized(part) for part in train_text.split("\\n\\n")}
-        validation_docs = {normalized(part) for part in validation_text.split("\\n\\n")}
+        train_docs = {normalized(part) for part in train_text.split("\n\n")}
+        validation_docs = {normalized(part) for part in validation_text.split("\n\n")}
         self.assertFalse(train_docs & validation_docs)
 
     def test_rejects_split_with_only_one_unique_document_group(self):
         with self.assertRaises(ValueError):
             _split_corpus_documents(
-                "Один и тот же текст.\\n\\nОДИН И ТОТ ЖЕ ТЕКСТ.",
+                "Один и тот же текст.\n\nОДИН И ТОТ ЖЕ ТЕКСТ.",
                 0.1,
                 1,
             )
