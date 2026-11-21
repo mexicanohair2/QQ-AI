@@ -16,6 +16,7 @@ qq_quantum/logs/
 training/downloads/
 training/data/qq_quantum_dialogue_v2.txt
 
-# Generated static website model assets (downloaded at build time)
+# Generated model package is fetched and bundled server-side during build; never publish it as a static asset.
+server/quantum/model.json
 /public/quantum/model.json
 /public/quantum/manifest.json

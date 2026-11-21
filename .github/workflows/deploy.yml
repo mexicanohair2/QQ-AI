@@ -26,6 +26,8 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install
+      - name: Prepare and verify server-side QQ Quantum weights
+        run: npm run prepare:quantum-assets
       - name: Type check
         run: npm run typecheck
       - name: Build

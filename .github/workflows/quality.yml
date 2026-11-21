@@ -26,6 +26,8 @@ jobs:
           node-version: 22
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
+      - name: Prepare and verify server-side QQ Quantum weights
+        run: npm run prepare:quantum-assets
       - name: Report dependency vulnerabilities (non-blocking)
         run: |
           npm ls vite @vitejs/plugin-react katex remark-math rehype-katex --all || true
