@@ -56,11 +56,12 @@ the corpus, tokenizer size, or split policy):
 
     OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python scripts/train_qq_quantum.py --corpus training/data/qq_quantum_dialogue_v2.txt --output-dir qq_quantum/artifacts/model-dialogue-v3 --steps 5000 --batch-size 8 --block-size 128 --learning-rate 0.0003 --vocab-size 1024 --layers 2 --heads 4 --embedding-size 128 --dropout 0.1 --seed 20261122 --checkpoint-interval 250 --device cpu
 
-The current split policy is seeded-random-document-split-v2. It assigns whole
-blank-line-delimited documents to train or validation using a deterministic seed;
-a complete conversation never crosses the split. The BPE tokenizer is trained only
-on the training partition. This avoids the previous contiguous-tail validation split
-and prevents tokenizer merges from being learned directly from held-out text.
+The current split policy is seeded-normalized-document-group-split-v3. It assigns
+whole blank-line-delimited documents to train or validation using a deterministic seed.
+Before splitting, documents with identical NFC-normalized text (whitespace collapsed
+and case-folded) are grouped so normalized exact duplicates cannot cross partitions.
+A complete conversation never crosses the split. The BPE tokenizer is trained only
+on the training partition, so merges are not learned directly from held-out text.
 
 For exact resume, keep the same corpus bytes, split policy, seed, tokenizer/model
 sizes, optimizer settings, and output directory, then add --resume and increase
@@ -105,10 +106,11 @@ language model:
 
     OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python scripts/train_qq_quantum.py --corpus training/data/qq_quantum_dialogue_v2.txt --output-dir qq_quantum/artifacts/model-dialogue-v4-pretrain --steps 2500 --batch-size 8 --block-size 128 --learning-rate 0.0003 --vocab-size 1024 --layers 2 --heads 4 --embedding-size 128 --dropout 0.1 --seed 20261122 --checkpoint-interval 250 --device cpu
 
-The split policy is seeded-random-document-split-v2. Whole documents are assigned
-to train or validation before tokenization; the BPE tokenizer is trained only on the
-training partition. Do not reuse or resume a checkpoint created with a different
-corpus or split policy.
+The split policy is seeded-normalized-document-group-split-v3. Whole documents are
+assigned to train or validation before tokenization, and normalized exact duplicates
+are kept in the same partition. The BPE tokenizer is trained only on the training
+partition. Do not reuse or resume a checkpoint created with a different corpus or
+split policy.
 
 ### Stage 2 — assistant-only supervised fine-tuning
 
